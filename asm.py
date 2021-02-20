@@ -88,6 +88,8 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     # Frequency coordinates sampling
     fy = jnp.linspace(-1 / (2 * dy) + 0.5 / (2 * y), 1 / (2 * dy) - 0.5 / (2 * y), ny)
     fx = jnp.linspace(-1 / (2 * dx) + 0.5 / (2 * x), 1 / (2 * dx) - 0.5 / (2 * x), nx)
+    # print(fx[:10])
+    # print(fy[:10])
     FX, FY = jnp.meshgrid(fx, fy)
 
     # Transfer function
@@ -103,12 +105,8 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     # Create mask
     H_f = jnp.uint8((jnp.abs(FX) < fx_max) & (jnp.abs(FY) < fy_max))
 
-    # Convert to rectangular
-    H_r = H_f * jnp.cos(H_)
-    H_i = H_f * jnp.sin(H_)
-
-    # Combine into complex
-    H = H_r + H_i * 1j
+    # Convert to complex
+    H = H_f * jnp.exp(H_ * 1j)
     return jnp.fft.ifftshift(H)
 
 
@@ -122,20 +120,36 @@ if __name__ == "__main__":
     point = jnp.zeros((h, w), dtype=jnp.complex64).at[h // 2, w // 2].set(1)
     H = compute(point, feature_size, wavelength, z)
 
-    # plt.imshow(H.real, cmap="gray")
+    # plt.imshow(H.real)
     # plt.show()
 
-    # plt.imshow(H.imag, cmap="gray")
+    # plt.imshow(H.imag)
     # plt.show()
 
     propagated = propagate(point, H)
 
-    fig, ax = plt.subplots(2, 1, figsize=(40, 20))
-    ax[0].imshow(jnp.abs(propagated))
-    ax[0].set_title("Magnitude")
+    plt.imsave("images/propagated_magnitude.png", jnp.abs(propagated))
+    plt.imsave("images/propagated_real.png", propagated.real)
+    plt.imsave("images/propagated_imaginary.png", propagated.imag)
 
-    ax[1].imshow(propagated.real)
-    ax[1].set_title("Real Component")
+    # Propagate the propagated impulse back by -z and verify we get the point back
+    propagated_back = jnp.conj(propagate(jnp.conj(propagated), H))
 
-    plt.show()
-    fig.savefig("images/propagated_point_visualization.png", bbox_inches="tight")
+    def center(field, size=50):
+        return lax.slice(
+            field,
+            (h // 2 - size // 2, w // 2 - size // 2),
+            (h // 2 + size // 2, w // 2 + size // 2),
+        )
+
+    plt.imsave(
+        "images/propagated_back_center.png",
+        jnp.abs(center(propagated_back)),
+    )
+    plt.imsave("images/point_center.png", jnp.abs(center(point)))
+
+    def _mse(a, b):
+        return jnp.mean(jnp.abs(a - b) ** 2)
+
+    mse = _mse(point, propagated_back)
+    print(f"MSE = {mse}")
