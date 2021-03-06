@@ -108,7 +108,7 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     H = H_f * jnp.exp(H_ * 1j)
     return jnp.fft.ifftshift(H)
 
-
+####### TODO: Move main to a test script ##########
 if __name__ == "__main__":
     z = 0.05
     wavelength = 520e-9
