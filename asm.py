@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 from jax import lax
 from jax import numpy as jnp
-from jax import vmap
 
 
 def _pad(field, pad_widths):
