@@ -6,7 +6,6 @@ import jax
 
 def _pad(field, pad_widths):
     """Pad input field by widths.
-
     Args:
         field: jnp.ndarray - Input field to be padded.
         pad_widths: Iterable - Widths to pad each axis of field (rank 1). Length of field should
@@ -19,7 +18,6 @@ def _pad(field, pad_widths):
 
 def propagate(u_in, H):
     """Propagates a single input field using the angular spectrum method.
-
     Args:
         u_in: jnp.ndarray, jnp.complex64 - Input complex tensor of size
             (height, width).
@@ -55,7 +53,6 @@ def propagate(u_in, H):
 def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
     """Compute kernel of propagation terms to be used in the angular spectrum
         method.
-
     Args:
         input_resolution: Tuple (height, width) indicating size of  input complex tensor.
         feature_size: tuple - Tuple (height, width) of individual holographic
@@ -64,11 +61,9 @@ def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
         z: float - Propagation distance.
         kernel_size: float - Size of kernel in primal domain used to determine
             padding, -1 if kernel and scene are the same size.
-
     Returns:
         H: jnp.ndarray, jnp.complex64 - Complex kernel in the frequency domain
             containing phase shifts to multiply with input field.
-
     """
     # Compute padding
     pad_widths = jnp.array([
