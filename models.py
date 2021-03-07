@@ -26,10 +26,6 @@ class PropCNN(nn.Module):
         self.wavelength = wavelength
         self.feature_size = feature_size
         self.precomped_H = compute(slm_field, self.feature_size, self.wavelength, self.prop_dist, kernel_size=self.kernel_size)
-        #### TODO:  set device and remove gradients #####
-        self.precomped_H = self.precomped_H.to(self.dev).detach()
-        self.precomped_H.requires_grad_(False)
-
         self.kernel_size = -1
         self.image_res = image_res
 

@@ -6,6 +6,9 @@ import configargparse
 
 
 def argument_parser():
+    """
+    return p: argparser for options needed to train model
+    """
     p = configargparse.ArgumentParser()
     p.add_argument('--channel', type=int, default=1, help='red:0, green:1, blue:2, rgb:3')
     p.add_argument('--pretrained_path', type=str, default='', help='Path of pretrained checkpoints as a starting point.')
@@ -31,8 +34,9 @@ def argument_parser():
 
 def prop_dist(channel, sled=False):
     """
-    :param channel:
-    :return:
+    :param channel: number indicating color (1: R, 2: G, 3: B)
+    :param sled: Flag with whether to use SLED or not
+    :return prop_dist: distance from SLM to the target plane
     """
     cm = 1e-2
     if sled:
@@ -70,10 +74,10 @@ def loss_model(loss_type):
 
 def psnr_srgb(recon, target):
     """
-    calculate psnr
-    :param recon:
-    :param target:
-    :return:
+    calculate psnr in srgb between reconstructed image and target image in the range [0, 1]
+    :param recon: reconstructed image amplitude
+    :param target: target image amplitude
+    :return psnr: psnr in srgb space
     """
     max_amp = max(recon.max(), target.max())
     target_linear = (target / max_amp) ** 2
@@ -89,6 +93,10 @@ def psnr_srgb(recon, target):
 
 
 def force_options(opt):
+    """
+    :param opt: opt with parameters for training
+    :return opt: opt with parameters forced to appropriate values for different networks
+    """
     if 'cnnr' in opt.target_network.lower():
         opt.outer_skip = True
         opt.norm = 'instance'
