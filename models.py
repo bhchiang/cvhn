@@ -6,6 +6,7 @@ import enum
 from typing import Any, Callable, Literal, Tuple
 
 import asm
+import jax
 from flax import linen as nn
 from flax import optim
 from flax.nn import initializers
@@ -223,7 +224,7 @@ class UNetSkipConnectionBlock(nn.Module):
         return out
 
 
-class UNetGenerator(nn.Module):
+class UNet(nn.Module):
     """
     We construct the U-Net from the innermost layer to the outermost layer recursively.
     """
@@ -273,7 +274,7 @@ class UNetGenerator(nn.Module):
     def __call__(self, x):
         out = self.unet(x)
 
-        # Add additional convolutional layer
+        # Add ending convolutional layer
         _complex = self.mode == Mode.COMPLEX
 
         if _complex:
@@ -298,59 +299,120 @@ class UNetGenerator(nn.Module):
 
 
 class PropagationCNN(nn.Module):
+    z: float  # Propagation distance in meters
+    mode: Mode  # Target network type
+
+    feature_size: jnp.ndarray = jnp.array([6.4e-6] * 2)
+    wavelength: float = 520e-9
+
+    # Resolution of input SLM phase field
+    slm_resolution: Tuple[int, int] = (1080, 1920)
+    image_resolution: Tuple[int, int] = (1080, 1920)
+
+    norm: Norm = 'instance'
+    activation: Activation = 'relu'
+
     def setup(self):
+        # Define number of input and output channels
+        input_nc_target = output_nc_target = 1
+
+        if mode == Mode.STACKED_COMPLEX:
+            input_nc_target = output_nc_target = 2
+
+        self.input_nc_target = input_nc_target
+        self.output_nc_target = output_nc_target
+
+        # Define ASM propagation kernel
+        H = compute(self.input_resolution, self.feature_size, self.wavelength,
+                    self.z)
+        self.H = H
+
+        # Define target U-Net
+        unet = UNet(input_nc_target=input_nc_target,
+                    output_nc_target=output_nc_target,
+                    mode=mode)
+        self.unet = unet
         pass
 
     @nn.compact
     def __call__(self, phase):
+        slm_field = jnp.ones_like(phase) * jnp.exp(phase * 1j)
+        slm_field = jnp.expand_dims(slm_field, axis=-1)
+
+        # Do ASM propagation
+        target_field = asm.propagate(slm_field, self.H)
+
+        # Send through target U-Net
+        if self.mode == Mode.AMPLITUDE:
+            target_field = jnp.abs(target_field)
+        elif self.mode == Mode.STACKED_COMPLEX:
+            target_field = jnp.dstack((target_field.real, target_field.imag))
+        elif self.mode == Mode.COMPLEX:
+            pass
+
+        # TODO: optional padding and cropping, for now we're doing padding = 'SAME'
+        out = self.unet()
         pass
 
 
 if __name__ == "__main__":
 
-    # Example just to show the network runs, doesn't actually do propagation / processing
-    _phase = io.imread("sample_pairs/phase/10_0.png")
-
-    phase = jnp.exp(1j * _phase)
-    phase = jnp.expand_dims(phase, axis=-1)
+    # Example just to show the network runs
+    phase = io.imread("sample_pairs/phase/10_0.png")
+    captured = io.imread(
+        "sample_pairs/captured/10_0_5.png")  # Intermediate plane
 
     # Running into OOM issues
     # Set to power of 2 to avoid running into shape issues while down or up sampling
+    captured = captured[:512, :512]
     phase = phase[:512, :512]
-    # Tested to work for both square and non-square inputs
-    mode = Mode.COMPLEX
-    if mode == Mode.AMPLITUDE:
-        phase = jnp.abs(phase)
-    elif mode == Mode.STACKED_COMPLEX:
-        phase = jnp.dstack((phase.real, phase.imag))
-    elif mode == Mode.COMPLEX:
-        pass
 
+    mode = Mode.COMPLEX
     print(phase.shape, phase.dtype)
 
     key = random.PRNGKey(0)
-    input_nc_target = output_nc_target = 2 if mode == Mode.STACKED_COMPLEX else 1
-    model = UNetGenerator(input_nc_target=input_nc_target,
-                          output_nc_target=output_nc_target,
-                          mode=mode)
 
+    model = PropagationCNN(mode=mode, z=0.05)
     variables = model.init(key, phase)
 
-    gt = io.imread("sample_pairs/captured/10_0_5.png")  # Intermediate plane
-    gt = gt + 0j
+    embed()
 
     @jit
-    def _loss(params, phase):
-        y = model.apply(params, phase)
-        _gt = jnp.expand_dims(gt[:512, :512], axis=-1)
-        return jnp.abs(jnp.mean(y - _gt)**2)
-
     def create_optimizer(params, learning_rate=0.001):
         optimizer_def = optim.Adam(learning_rate=learning_rate)
         optimizer = optimizer_def.create(params)
         return optimizer
 
-    def train_step(optimizer, batch):
-        pass
+    # Define additional error functions if desired
+    @jit
+    def mse(x, y):
+        return jnp.abs(jnp.mean(y - x)**2)
 
+    @jit
+    def train_step(optimizer, batch, error=mse):
+        # Batch contains a single field, size (1, H, W, C)
+
+        # You can swap out the error function depending on the network type.
+        phase = batch['phase']  # Input SLM phase
+        captured = batch['captured']  # Label (amplitude)
+
+        def _loss(params):
+            simulated = model.apply(params, phase)
+            return error(simulated, captured)
+
+        # If returning more than loss from _loss, set has_aux=True
+        # holomorphic=True if doing complex optimization (?)
+        grad_fn = jax.value_and_grad(_loss)
+
+        # out is the simulated result from our model, not necessary
+        out, grad = grad_fn(optimizer.target)
+        optimizer = optimizer.apply_gradient(grad)
+        return optimizer, out
+
+    batch = {
+        'phase': phase,  # (H, W, 1)
+        'captured': jnp.expand_dims(captured[:512, 512], axis=-1),
+    }
+    optimizer = create_optimizer(variables)
+    optimizer, out = train_step(optimizer, batch)
     embed()

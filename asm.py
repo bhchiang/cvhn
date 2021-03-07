@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from jax import lax
 from jax import numpy as jnp
+import jax
 
 
 def _pad(field, pad_widths):
@@ -51,13 +52,12 @@ def propagate(u_in, H):
     return cropped
 
 
-def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
+def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
     """Compute kernel of propagation terms to be used in the angular spectrum
         method.
 
     Args:
-        u_in: jnp.ndarray, jnp.complex64 - Input complex tensor of size
-            (height, width).
+        input_resolution: Tuple (height, width) indicating size of  input complex tensor.
         feature_size: tuple - Tuple (height, width) of individual holographic
             features in meters.
         wavelength: float - Wavelength in meters.
@@ -71,18 +71,16 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
 
     """
     # Compute padding
-    input_resolution = u_in.shape
     pad_widths = jnp.array([
         i // 2 if kernel_size == -1 else kernel_size for i in input_resolution
     ])
-    u_in = _pad(u_in, pad_widths)
-    # print(input_resolution, pad_widths, u_in.shape)
+    field_resolution = tuple(
+        (x + y for x, y in zip(input_resolution, pad_widths)))
 
     # Compute kernel
-    field_resolution = u_in.shape
     ny, nx = field_resolution
     dy, dx = feature_size
-    y, x = (dy * float(ny), dx * float(nx))
+    y, x = (dy * jnp.float32(ny), dx * jnp.float32(nx))
 
     # Frequency coordinates sampling
     fy = jnp.linspace(-1 / (2 * dy) + 0.5 / (2 * y),
@@ -111,7 +109,6 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     return jnp.fft.ifftshift(H)
 
 
-####### TODO: Move main to a test script ##########
 if __name__ == "__main__":
     z = 0.05
     wavelength = 520e-9
@@ -120,7 +117,7 @@ if __name__ == "__main__":
     # Propagate point impulse
     h, w = (1080, 1920)
     point = jnp.zeros((h, w), dtype=jnp.complex64).at[h // 2, w // 2].set(1)
-    H = compute(point, feature_size, wavelength, z)
+    H = compute(point.shape, feature_size, wavelength, z)
 
     # plt.imshow(H.real)
     # plt.show()
