@@ -72,9 +72,9 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     """
     # Compute padding
     input_resolution = u_in.shape
-    pad_widths = jnp.array(
-        [i // 2 if kernel_size == -1 else kernel_size for i in input_resolution]
-    )
+    pad_widths = jnp.array([
+        i // 2 if kernel_size == -1 else kernel_size for i in input_resolution
+    ])
     u_in = _pad(u_in, pad_widths)
     # print(input_resolution, pad_widths, u_in.shape)
 
@@ -85,21 +85,23 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     y, x = (dy * float(ny), dx * float(nx))
 
     # Frequency coordinates sampling
-    fy = jnp.linspace(-1 / (2 * dy) + 0.5 / (2 * y), 1 / (2 * dy) - 0.5 / (2 * y), ny)
-    fx = jnp.linspace(-1 / (2 * dx) + 0.5 / (2 * x), 1 / (2 * dx) - 0.5 / (2 * x), nx)
+    fy = jnp.linspace(-1 / (2 * dy) + 0.5 / (2 * y),
+                      1 / (2 * dy) - 0.5 / (2 * y), ny)
+    fx = jnp.linspace(-1 / (2 * dx) + 0.5 / (2 * x),
+                      1 / (2 * dx) - 0.5 / (2 * x), nx)
     # print(fx[:10])
     # print(fy[:10])
     FX, FY = jnp.meshgrid(fx, fy)
 
     # Transfer function
-    HH = (2 * jnp.pi) * jnp.sqrt(1 / (wavelength ** 2) - (FX ** 2 + FY ** 2))
+    HH = (2 * jnp.pi) * jnp.sqrt(1 / (wavelength**2) - (FX**2 + FY**2))
 
     # Multiply by distance to get the final phase shift
     H_ = HH * z
 
     # Band-limited ASM - Matsushima et. al (2009)
-    fy_max = 1 / jnp.sqrt((2 * jnp.abs(z) * (1 / y)) ** 2 + 1) / wavelength
-    fx_max = 1 / jnp.sqrt((2 * jnp.abs(z) * (1 / x)) ** 2 + 1) / wavelength
+    fy_max = 1 / jnp.sqrt((2 * jnp.abs(z) * (1 / y))**2 + 1) / wavelength
+    fx_max = 1 / jnp.sqrt((2 * jnp.abs(z) * (1 / x))**2 + 1) / wavelength
 
     # Create mask
     H_f = jnp.uint8((jnp.abs(FX) < fx_max) & (jnp.abs(FY) < fy_max))
@@ -107,6 +109,7 @@ def compute(u_in, feature_size, wavelength, z, kernel_size=-1):
     # Convert to complex
     H = H_f * jnp.exp(H_ * 1j)
     return jnp.fft.ifftshift(H)
+
 
 ####### TODO: Move main to a test script ##########
 if __name__ == "__main__":
@@ -148,7 +151,7 @@ if __name__ == "__main__":
     plt.imsave("images/point_center.png", jnp.abs(center(point)))
 
     def _mse(a, b):
-        return jnp.mean(jnp.abs(a - b) ** 2)
+        return jnp.mean(jnp.abs(a - b)**2)
 
     mse = _mse(point, propagated_back)
     print(f"MSE = {mse}")
