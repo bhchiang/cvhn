@@ -92,14 +92,10 @@ def complex_scale_init(rng, shape):
 
 class Model(nn.Module):
     features: int = 10
+    num_downs: int = 5
 
     def setup(self):
-        self.conv = nn.Conv(features=self.features,
-                            kernel_size=(2, 2),
-                            strides=(1, 1),
-                            dtype=jnp.complex64,
-                            kernel_init=complex_kernel_init,
-                            bias_init=complex_bias_init)
+
         self.norm = LayerNorm(dtype=jnp.complex64,
                               epsilon=jnp.complex64(1e-6),
                               bias_init=complex_bias_init,
@@ -107,8 +103,15 @@ class Model(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        embed()
-        x = self.conv(x)
+        # embed()
+        for i in jnp.arange(self.num_downs, 1, -1):
+            print(i)
+            x = nn.Conv(features=i**2,
+                        kernel_size=(2, 2),
+                        strides=(1, 1),
+                        dtype=jnp.complex64,
+                        kernel_init=complex_kernel_init,
+                        bias_init=complex_bias_init)(x)
         print(x.dtype)
         x = self.norm(x)
         print(x.dtype, 'after norm')

@@ -201,10 +201,9 @@ class UNetSkipConnectionBlock(nn.Module):
         print(
             f"Skip connection, outer_nc = {self.outer_nc}, inner_nc = {self.inner_nc}, x.shape = {x.shape}"
         )
-        embed()
+        # embed()
         out = self.down_conv(x)
         print(f"After down conv, out.shape = {out.shape}")
-        return out
 
         if self.norm_layer is not None:
             out = self.down_norm(out)
@@ -246,10 +245,9 @@ class UNetGenerator(nn.Module):
 
     input_nc_target: int
     output_nc_target: int
+    outer_ncs: dict
+    inner_ncs: dict
     mode: Mode
-
-    inner_nc: dict
-    outer_nc: dict
 
     norm_layer: Norm = "instance"
     activation: Activation = "relu"
@@ -271,8 +269,8 @@ class UNetGenerator(nn.Module):
         # Add innermost block
         print("Adding innnermost block")
         unet = UNetSkipConnectionBlock(
-            outer_nc=outer_nc['innermost'],
-            inner_nc=inner_nc['innermost'],
+            outer_nc=self.outer_ncs['innermost'],
+            inner_nc=self.inner_ncs['innermost'],
             # outer_nc=self.channels(self.num_downs - 1),
             # inner_nc=self.channels(self.num_downs - 1),
             norm_layer=self.norm_layer,
@@ -281,13 +279,14 @@ class UNetGenerator(nn.Module):
 
         # Recursively generate the UNet
         print("Starting loop")
-        for i in jnp.arange(1, self.num_downs - 1)[::-1]:
+        for outer_nc, inner_nc in zip(outer_ncs['middle'],
+                                      inner_ncs['middle']):
             # outer_nc = self.channels(i)
             # inner_nc = self.channels(i + 1)
             # print(f"i = {i}, outer_nc = {outer_nc}, inner_nc = {inner_nc}")
             unet = UNetSkipConnectionBlock(
-                outer_nc=outer_nc[str(i)],
-                inner_nc=inner_nc[str(i)],
+                outer_nc=outer_nc,
+                inner_nc=inner_nc,
                 submodule=unet,
                 mode=self.mode,
             )
@@ -295,8 +294,8 @@ class UNetGenerator(nn.Module):
         # Add outermost block
         print("Adding outermost block")
         unet = UNetSkipConnectionBlock(
-            outer_nc=outer_nc['outermost'],
-            inner_nc=inner_nc['outermost'],
+            outer_nc=self.outer_ncs['outermost'],
+            inner_nc=self.inner_ncs['outermost'],
             #    outer_nc=min(self.nf0,
             #                 self.max_channels),
             #    inner_nc=min(2 * self.nf0,
@@ -336,24 +335,32 @@ class UNetGenerator(nn.Module):
 
         return out
 
+    @classmethod
+    def inds(cls):
+        return jnp.arange(cls.num_downs - 1, 1, -1)
 
-def generate_nc(num_downs=8, nf0=32, max_channels=512):
-    outer_nc = {}
-    inner_nc = {}
+    @classmethod
+    def generate_ncs(cls):
+        inds = cls.inds()
 
-    def channels(n):
-        return jnp.minimum(2**n * nf0, max_channels)
+        outer_nc = {'middle': jnp.zeros(len(inds), jnp.int32)}
+        inner_nc = {'middle': jnp.zeros(len(inds), jnp.int32)}
 
-    inner_nc['innermost'] = channels(num_downs - 1)
-    outer_nc['innermost'] = inner_nc['innermost']
+        inner_nc['innermost'] = cls.channels(cls.num_downs - 1)
+        outer_nc['innermost'] = inner_nc['innermost']
 
-    for i in jnp.arange(1, num_downs - 1)[::-1]:
-        outer_nc[str(i)] = channels(i)
-        inner_nc[str(i)] = channels(i + 1)
+        for j, i in enumerate(inds):
+            outer_nc['middle'] = outer_nc['middle'].at[j].set(cls.channels(i))
+            inner_nc['middle'] = inner_nc['middle'].at[j].set(
+                cls.channels(i + 1))
 
-    inner_nc['outermost'] = jnp.minimum(nf0, max_channels)
-    outer_nc['outermost'] = jnp.minimum(2 * nf0, max_channels)
-    return outer_nc, inner_nc
+        inner_nc['outermost'] = jnp.minimum(cls.nf0, cls.max_channels)
+        outer_nc['outermost'] = jnp.minimum(2 * cls.nf0, cls.max_channels)
+        return outer_nc, inner_nc
+
+    @classmethod
+    def channels(cls, n):
+        return jnp.int32(jnp.minimum(2**n * cls.nf0, cls.max_channels))
 
 
 if __name__ == "__main__":
@@ -380,15 +387,13 @@ if __name__ == "__main__":
 
     key = random.PRNGKey(0)
     input_nc_target = output_nc_target = 2 if mode == Mode.STACKED_COMPLEX else 1
-
-    outer_nc, inner_nc = generate_nc()
-    model = UNetGenerator(
-        input_nc_target=input_nc_target,
-        output_nc_target=output_nc_target,
-        outer_nc=outer_nc,
-        inner_nc=inner_nc,
-        mode=mode,
-    )
+    outer_ncs, inner_ncs = UNetGenerator.generate_ncs()
+    embed()
+    model = UNetGenerator(input_nc_target=input_nc_target,
+                          output_nc_target=output_nc_target,
+                          outer_ncs=outer_ncs,
+                          inner_ncs=inner_ncs,
+                          mode=mode)
 
     params = model.init(key, phase)
 
@@ -400,6 +405,7 @@ if __name__ == "__main__":
     @jit
     def _error(params, phase):
         y = model.apply(params, phase)
-        return jnp.abs(jnp.mean(y - gt)**2)
+        _gt = jnp.expand_dims(gt[:256, :128], axis=-1)
+        return jnp.abs(jnp.mean(y - _gt)**2)
 
     embed()
