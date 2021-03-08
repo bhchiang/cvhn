@@ -28,11 +28,11 @@ Dtype = Any
 
 
 class Mode(enum.Enum):
-    # One input channel representing the amplitude of our phase (real).
+    # One input channel representing the amplitude of our field (real).
     AMPLITUDE = 1
 
     # Two real input channels, one representing the real component and
-    # the other representing the imaginary component of the complex phase.
+    # the other representing the imaginary component of the complex field.
     STACKED_COMPLEX = 2
 
     # True complex mode, 1 complex input channel.
@@ -408,8 +408,7 @@ class PropagationCNN(nn.Module):
 if __name__ == "__main__":
     # Example just to show the network runs
     phase = io.imread("sample_pairs/phase/10_0.png")
-    captured = io.imread(
-        "sample_pairs/captured/10_0_5.png")  # Intermediate plane
+    captured = io.imread("sample_pairs/captured/10_0_5.png")
 
     mode = Mode.COMPLEX
     print(phase.shape, phase.dtype)
@@ -446,11 +445,8 @@ if __name__ == "__main__":
             simulated = model.apply(params, phase)
             return error(simulated, captured)
 
-        # If returning more than loss from _loss, set has_aux=True
-        # holomorphic=True if doing complex optimization (?)
         grad_fn = jax.value_and_grad(_loss)
 
-        # out is the simulated result from our model, not necessary
         loss, grad = grad_fn(optimizer.target)
         optimizer = optimizer.apply_gradient(grad)
         return optimizer, loss
