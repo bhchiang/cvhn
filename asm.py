@@ -4,18 +4,35 @@ from jax import numpy as jnp
 import jax
 
 
-def _pad(field, pad_widths):
+def _pad(field, pad_y, pad_x):
     """Pad input field by widths.
+
     Args:
-        field: jnp.ndarray - Input field to be padded.
-        pad_widths: Iterable - Widths to pad each axis of field (rank 1). Length of field should
+        field: jnp.ndarray - Input field to be padded of shape (height, width).
+        pad_sizes: jnp.ndarray[int, int] - Widths to pad each axis of field (rank 1). Length of field should
             be equal to the length of field.shape.
+
+    Returns:
+        padded: jnp.ndarray - Padded field of shape = field.shape + pad_sizes * 2.
     """
-    pad_widths = jnp.array(pad_widths)
-    padding = jnp.stack((pad_widths, pad_widths)).T
-    return jnp.pad(field, padding)
+    return jnp.pad(field, ((pad_y, pad_y), (pad_x, pad_x)))
 
 
+def _crop(field, pad_y, pad_x):
+    """Crop input field by pad sizes.
+    Args:
+        field: jnp.ndarray - Input field to be cropped of shape (height, width).
+        pad_sizes: jnp.ndarray[int, int] - Width of pads to remove from each side of 
+            each axis of the field.
+
+    Returns:            
+        cropped: jnp.ndarray - Cropped field of shape = field.shape - pad_sizes * 2.
+    """
+    h, w = field.shape
+    return lax.slice(field, (pad_y, pad_x), (h - pad_y, w - pad_x))
+
+
+@jax.jit
 def propagate(u_in, H):
     """Propagates a single input field using the angular spectrum method.
     Args:
@@ -29,13 +46,12 @@ def propagate(u_in, H):
             (height, width).
     """
 
-    # Pad input field to the size of kernel
-    H_h, H_w = H.shape
-    u_h, u_w = u_in.shape
+    # # Pad input field to the size of kernel
+    # H_h, H_w = H.shape
+    # u_h, u_w = u_in.shape
 
-    pad_widths = jnp.array([H_h - u_h, H_w - u_w]) // 2
-    pad_h, pad_w = pad_widths
-    u_in = _pad(u_in, pad_widths)
+    # pad_y, pad_x = jnp.array([H_h - u_h, H_w - u_w]) // 2
+    # u_in = _pad(u_in, pad_y, pad_x)
 
     # Decompose into angular spectrum of plane waves
     # norm="ortho" not supported yet - https://github.com/google/jax/issues/1877
@@ -45,12 +61,11 @@ def propagate(u_in, H):
     U2 = H * U1
 
     u_out = jnp.fft.fftshift(jnp.fft.ifftn(U2))
-    cropped = lax.slice(u_out, pad_widths, (H_h - pad_h, H_w - pad_w))
-    # print(u_out.shape, cropped.shape)
-    return cropped
+    # cropped = _crop(u_out, pad_y, pad_x)
+    return u_out
 
 
-def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
+def compute(input_resolution, feature_size, wavelength, d, kernel_size=-1):
     """Compute kernel of propagation terms to be used in the angular spectrum
         method.
     Args:
@@ -58,7 +73,7 @@ def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
         feature_size: tuple - Tuple (height, width) of individual holographic
             features in meters.
         wavelength: float - Wavelength in meters.
-        z: float - Propagation distance.
+        d: float - Propagation distance.
         kernel_size: float - Size of kernel in primal domain used to determine
             padding, -1 if kernel and scene are the same size.
     Returns:
@@ -67,10 +82,10 @@ def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
     """
     # Compute padding
     pad_widths = jnp.array([
-        i // 2 if kernel_size == -1 else kernel_size for i in input_resolution
+        s // 2 if kernel_size == -1 else kernel_size for s in input_resolution
     ])
-    field_resolution = tuple(
-        (x + y for x, y in zip(input_resolution, pad_widths)))
+    field_resolution = jnp.array(
+        [x + y for x, y in zip(input_resolution, pad_widths)])
 
     # Compute kernel
     ny, nx = field_resolution
@@ -90,11 +105,11 @@ def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
     HH = (2 * jnp.pi) * jnp.sqrt(1 / (wavelength**2) - (FX**2 + FY**2))
 
     # Multiply by distance to get the final phase shift
-    H_ = HH * z
+    H_ = HH * d
 
     # Band-limited ASM - Matsushima et. al (2009)
-    fy_max = 1 / jnp.sqrt((2 * jnp.abs(z) * (1 / y))**2 + 1) / wavelength
-    fx_max = 1 / jnp.sqrt((2 * jnp.abs(z) * (1 / x))**2 + 1) / wavelength
+    fy_max = 1 / jnp.sqrt((2 * jnp.abs(d) * (1 / y))**2 + 1) / wavelength
+    fx_max = 1 / jnp.sqrt((2 * jnp.abs(d) * (1 / x))**2 + 1) / wavelength
 
     # Create mask
     H_f = jnp.uint8((jnp.abs(FX) < fx_max) & (jnp.abs(FY) < fy_max))
@@ -105,14 +120,14 @@ def compute(input_resolution, feature_size, wavelength, z, kernel_size=-1):
 
 
 if __name__ == "__main__":
-    z = 0.05
+    d = 0.05  # Propagation distance
     wavelength = 520e-9
-    feature_size = [6.4e-6] * 2
+    feature_size = jnp.array([6.4e-6] * 2)
 
     # Propagate point impulse
     h, w = (1080, 1920)
     point = jnp.zeros((h, w), dtype=jnp.complex64).at[h // 2, w // 2].set(1)
-    H = compute(point.shape, feature_size, wavelength, z)
+    H = compute(point.shape, feature_size, wavelength, d)
 
     # plt.imshow(H.real)
     # plt.show()

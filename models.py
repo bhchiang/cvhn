@@ -15,6 +15,7 @@ from jax import jit, lax
 from jax import numpy as jnp
 from jax import random
 from skimage import io
+from tqdm import tqdm
 
 # Add more options if necessary
 Norm = Literal["instance"]
@@ -42,7 +43,7 @@ class Mode(enum.Enum):
 class InstanceNorm(nn.Module):
     @nn.compact
     def __call__(self, x):
-        pass
+        return nn.LayerNorm()(x)
 
 
 class ComplexLayerNorm(nn.Module):
@@ -299,15 +300,14 @@ class UNet(nn.Module):
 
 
 class PropagationCNN(nn.Module):
-    z: float  # Propagation distance in meters
+    d: float  # Propagation distance in meters
     mode: Mode  # Target network type
 
     feature_size: jnp.ndarray = jnp.array([6.4e-6] * 2)
     wavelength: float = 520e-9
 
     # Resolution of input SLM phase field
-    slm_resolution: Tuple[int, int] = (1080, 1920)
-    image_resolution: Tuple[int, int] = (1080, 1920)
+    field_resolution: jnp.ndarray = jnp.array([1080, 1920])
 
     norm: Norm = 'instance'
     activation: Activation = 'relu'
@@ -323,59 +323,101 @@ class PropagationCNN(nn.Module):
         self.output_nc_target = output_nc_target
 
         # Define ASM propagation kernel
-        H = compute(self.input_resolution, self.feature_size, self.wavelength,
-                    self.z)
+        H = asm.compute(self.field_resolution, self.feature_size,
+                        self.wavelength, self.d)
         self.H = H
 
-        # Define target U-Net
+        # Define U-Net
+
+        # Resolution at target plane for input to U-Net
+        # Multiple of 2**8 to handle 2 ** 8 down and up samples)
+        self.target_resolution = jnp.array([
+            s if s % (2**8) == 0 else s + (2**8 - s % (2**8))
+            for s in self.field_resolution
+        ])
+
         unet = UNet(input_nc_target=input_nc_target,
                     output_nc_target=output_nc_target,
                     mode=mode)
         self.unet = unet
-        pass
+
+    def _padding(self, a, b):
+        """Compute padding differences between shapes a, b.
+        We do this by hand to avoid tracer values.
+
+        We want to pad of size b to size a.
+        """
+        a_h, a_w = a
+        b_h, b_w = b
+        return (a_h - b_h) // 2, (a_w - b_w) // 2
 
     @nn.compact
     def __call__(self, phase):
-        slm_field = jnp.ones_like(phase) * jnp.exp(phase * 1j)
-        slm_field = jnp.expand_dims(slm_field, axis=-1)
+        # Shape of phase should match self.field_resolution (rank 3)
+        slm_field = jnp.exp(phase * 1j)
 
-        # Do ASM propagation
-        target_field = asm.propagate(slm_field, self.H)
+        # Pad SLM field to match kernel (H) shape
+        pad_y, pad_x = self._padding(self.H.shape, self.field_resolution)
 
-        # Send through target U-Net
+        # TODO: move _pad and _crop out from .asm
+        slm_field = asm._pad(slm_field, pad_y, pad_x)
+
+        # ASM propagation to get the ideal reconstruction
+        z = asm.propagate(slm_field, self.H)
+
+        # Crop back to self.field_resolution
+        z = asm._crop(z, pad_y, pad_x)
+        print(f"Ideal reconstruction shape = {z.shape}")
+
+        # Send through U-Net to correct for output at our target plane
+        # Pad to target resolution
+        pad_y, pad_x = self._padding(self.target_resolution,
+                                     self.field_resolution)
+        z = asm._pad(z, pad_y, pad_x)
+
+        # Add channel dimension to send into network
+        z = jnp.expand_dims(z, axis=-1)
+
         if self.mode == Mode.AMPLITUDE:
-            target_field = jnp.abs(target_field)
+            z = jnp.abs(z)
         elif self.mode == Mode.STACKED_COMPLEX:
-            target_field = jnp.dstack((target_field.real, target_field.imag))
+            z = jnp.dstack((jnp.real(z), jnp.imag(z)))
         elif self.mode == Mode.COMPLEX:
             pass
 
-        # TODO: optional padding and cropping, for now we're doing padding = 'SAME'
-        out = self.unet()
-        pass
+        out = self.unet(z)
+
+        # Crop back to original resolution
+        # Remove channel axis = -1
+        out = out.reshape(self.target_resolution)
+        out = asm._crop(out, pad_y, pad_x)
+
+        # Get amplitude of output depending on the mode
+        if self.mode == Mode.AMPLITUDE:
+            return out
+        elif self.mode == Mode.STACKED_COMPLEX:
+            return jnp.sqrt(out[..., 0]**2 + out[..., 1]**2)
+        elif self.mode == Mode.COMPLEX:
+            return jnp.abs(out)
 
 
 if __name__ == "__main__":
-
     # Example just to show the network runs
     phase = io.imread("sample_pairs/phase/10_0.png")
     captured = io.imread(
         "sample_pairs/captured/10_0_5.png")  # Intermediate plane
 
-    # Running into OOM issues
-    # Set to power of 2 to avoid running into shape issues while down or up sampling
-    captured = captured[:512, :512]
-    phase = phase[:512, :512]
-
-    mode = Mode.COMPLEX
+    mode = Mode.STACKED_COMPLEX
     print(phase.shape, phase.dtype)
 
     key = random.PRNGKey(0)
 
-    model = PropagationCNN(mode=mode, z=0.05)
+    model = PropagationCNN(mode=mode, d=0.05)
     variables = model.init(key, phase)
 
-    embed()
+    @jax.jit
+    def apply(variables, phase):
+        return model.apply(variables, phase)
 
     @jit
     def create_optimizer(params, learning_rate=0.001):
@@ -383,7 +425,7 @@ if __name__ == "__main__":
         optimizer = optimizer_def.create(params)
         return optimizer
 
-    # Define additional error functions if desired
+    # TODO: Define additional error functions if desired
     @jit
     def mse(x, y):
         return jnp.abs(jnp.mean(y - x)**2)
@@ -405,14 +447,19 @@ if __name__ == "__main__":
         grad_fn = jax.value_and_grad(_loss)
 
         # out is the simulated result from our model, not necessary
-        out, grad = grad_fn(optimizer.target)
+        loss, grad = grad_fn(optimizer.target)
         optimizer = optimizer.apply_gradient(grad)
-        return optimizer, out
+        return optimizer, loss
 
     batch = {
-        'phase': phase,  # (H, W, 1)
-        'captured': jnp.expand_dims(captured[:512, 512], axis=-1),
+        'phase': phase,  # (H, W)
+        'captured': captured,  # (H, W)
     }
+
     optimizer = create_optimizer(variables)
-    optimizer, out = train_step(optimizer, batch)
+
+    for i in tqdm(range(100)):
+        optimizer, loss = train_step(optimizer, batch)
+        print(loss)
+
     embed()
