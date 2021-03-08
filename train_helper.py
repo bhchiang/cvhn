@@ -3,6 +3,7 @@ import torch.nn as nn
 import utils
 import torch
 import configargparse
+from models import Mode
 
 
 def argument_parser():
@@ -57,19 +58,18 @@ def prop_dist(channel, sled=False):
     return prop_dist
 
 
-def loss_model(loss_type):
+def get_mode(target_network):
     """
-    :param loss_type:
-    :return:
+    :param target_network: string with target network type
+    :return mode
     """
-    ##### TODO: CREATE LOSS COMPUTATIONS IN JAX ##########
-    # Options for the algorithm
-    if loss_type.upper() == 'L1':
-        out_loss = nn.L1Loss()
-    elif loss_type.upper() == 'L2':
-        out_loss = nn.MSELoss()
-
-    return out_loss
+    if 'cnnr' in target_network.lower():
+        mode = Mode.AMPLITUDE
+    elif 'stackedcnnc' in target_network.lower():
+        mode = Mode.STACKED_COMPLEX
+    elif 'complexcnnc' in target_network.lower():
+        mode = Mode.COMPLEX
+    return mode
 
 
 def psnr_srgb(recon, target):
@@ -89,7 +89,7 @@ def psnr_srgb(recon, target):
     recon_srgb = torch.clip(recon_linear, 0.0, 1.0)
     recon_srgb = (12.92 * recon_srgb) * (recon_srgb <= thresh) \
                  + (1.055 * (recon_srgb ** (1 / 2.4)) - 0.055) * (~(recon_srgb <= thresh))
-    return 10 * jnp.log10(1 / ((((target_srgb-recon_srgb)**2).mean()))
+    return 10 * jnp.log10(1 / ((((target_srgb-recon_srgb)**2).mean())))
 
 
 def force_options(opt):

@@ -79,6 +79,6 @@ def crop_image(field, target_shape):
 
         crop_slices = [slice(int(f), int(-e) if e else None)
                        for f, e in zip(crop_front, crop_end)]
-        return field[(..., *crop_slice, :)]
+        return jnp.expand_dims(field[...,0][(..., *crop_slices)], axis=-1)
     else:
         return field

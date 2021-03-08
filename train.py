@@ -33,6 +33,9 @@ from tensorboardX import SummaryWriter
 import train_helper as helper
 from models import PropagationCNN
 from flax import serialization
+from jax import jit
+from skimage import io
+from jax import random
 
 # Command line argument processing
 p = helper.argument_parser()
@@ -49,7 +52,7 @@ print(f'   - Training forward propagation model...')
 
 # Initialize setup parameters
 cm, mm, um, nm = 1e-2, 1e-3, 1e-6, 1e-9
-prop_dists = helper.prop_dist(opt.channel, opt.sled)  # propagation distances
+prop_dist = helper.prop_dist(opt.channel, opt.sled)  # propagation distances
 wavelength = (636.4 * nm, 517.7 * nm, 440.8 * nm)[channel]
 if opt.sled:
     wavelength = (634.8 * nm, 510 * nm, 450 * nm)[channel]
@@ -71,12 +74,11 @@ model_path = opt.model_path  # path for new model checkpoints
 utils.cond_mkdir(model_path)
 
 # Initialize model
-phase = io.imread("sample_pairs/phase/10_0.png")
-captured = io.imread(
-    "sample_pairs/captured/10_0_5.png")  # Intermediate plane
-mode = Mode.COMPLEX
+phase = io.imread(os.path.join(os.path.join(opt.phase_path, 'test'),"10_0.png"))
+mode = helper.get_mode(opt.target_network)
+print(f'Mode set: {mode}')
 key = random.PRNGKey(0)
-model = PropagationCNN(mode=mode, d=0.05)
+model = PropagationCNN(mode=mode, d=prop_dist)
 variables = model.init(key, phase)
 @jax.jit
 def apply(variables, phase):
@@ -92,7 +94,7 @@ if opt.pretrained_path != '':
 
 # Setup Optimizer
 @jit
-def create_optimizer(params, learning_rate=0.001):
+def create_optimizer(params, learning_rate=opt.lr_model):
     optimizer_def = optim.Adam(learning_rate=learning_rate)
     optimizer = optimizer_def.create(params)
     return optimizer
@@ -108,13 +110,13 @@ def train_step(optimizer, batch, error=mse, update=True, return_amp=False, compu
     captured = batch['captured']  # Label (amplitude)
 
     def _loss(params):
-        simulated = model.apply(params, phase)
+        simulated = apply(params, phase)
         simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0), axis=-1)
         simulated = utils.crop_image(simulated, roi_res)
         return error(simulated, captured)
 
     def _loss_mse(params):
-        simulated = model.apply(params, phase)
+        simulated = apply(params, phase)
         simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0), axis=-1)
         simulated = utils.crop_image(simulated, roi_res)
         return mse(simulated, captured)
@@ -134,7 +136,7 @@ def train_step(optimizer, batch, error=mse, update=True, return_amp=False, compu
     else:
         loss_mse = None
     if return_amp:
-        model_amp = model.apply(params, phase)
+        model_amp = apply(params, phase)
         model_amp = jnp.expand_dims(jnp.expand_dims(model_amp, axis=0), axis=-1)
         model_amp = utils.crop_image(model_amp, roi_res)
     else:
