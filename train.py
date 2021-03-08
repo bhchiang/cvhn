@@ -40,14 +40,15 @@ from jax import random
 # Command line argument processing
 p = helper.argument_parser()
 opt = p.parse_args()
-opt = helper.force_options(opt)  # set query with opt.experiment in command line
+opt = helper.force_options(
+    opt)  # set query with opt.experiment in command line
 
 # Initialize Run ID
 channel = opt.channel  # Red:0 / Green:1 / Blue:2
 chan_str = ('red', 'green', 'blue')[channel]
 run_id = f'{chan_str}_{opt.experiment}_' \
          f'Target{opt.target_network}-Activation{opt.activation}-Norm{opt.norm}_' \
-         f'{opt.loss_type}loss_lr{opt.lr_model}' 
+         f'{opt.loss_type}loss_lr{opt.lr_model}'
 print(f'   - Training forward propagation model...')
 
 # Initialize setup parameters
@@ -61,28 +62,36 @@ slm_res = (1080, 1920)  # resolution of SLM
 image_res = (1080, 1920)  # 1080p dataset
 roi_res = (880, 1600)  # regions of interest (to penalize)
 
+
 # Setup Loss Functions
 @jit
 def mse(x, y):
     return jnp.mean((y - x)**2)
+
+
 @jit
 def L1(x, y):
     return jnp.mean(jnp.abs(y - x))
+
 
 # Path for data
 model_path = opt.model_path  # path for new model checkpoints
 utils.cond_mkdir(model_path)
 
 # Initialize model
-phase = io.imread(os.path.join(os.path.join(opt.phase_path, 'test'),"10_0.png"))
+phase = io.imread(
+    os.path.join(os.path.join(opt.phase_path, 'test'), "10_0.png"))
 mode = helper.get_mode(opt.target_network)
 print(f'Mode set: {mode}')
 key = random.PRNGKey(0)
 model = PropagationCNN(mode=mode, d=prop_dist)
 variables = model.init(key, phase)
+
+
 @jax.jit
 def apply(variables, phase):
     return model.apply(variables, phase)
+
 
 # Load pretrained model and start from there
 if opt.pretrained_path != '':
@@ -92,32 +101,43 @@ if opt.pretrained_path != '':
     ifile.close()
     variables = serialization.from_bytes(variables, bytes_input)
 
+
 # Setup Optimizer
 @jit
 def create_optimizer(params, learning_rate=opt.lr_model):
     optimizer_def = optim.Adam(learning_rate=learning_rate)
     optimizer = optimizer_def.create(params)
     return optimizer
+
+
 optimizer = create_optimizer(variables)
+
 
 # Setup Update step
 @jit
-def train_step(optimizer, batch, error=mse, update=True, return_amp=False, compute_mse=False):
+def train_step(optimizer,
+               batch,
+               error=mse,
+               update=True,
+               return_amp=False,
+               compute_mse=False):
     # Batch contains a single field, size (1, H, W, C)
 
     # You can swap out the error function depending on the network type.
-    phase = batch['phase'][0,...,0]  # Input SLM phase
+    phase = batch['phase'][0, ..., 0]  # Input SLM phase
     captured = batch['captured']  # Label (amplitude)
 
     def _loss(params):
         simulated = apply(params, phase)
-        simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0), axis=-1)
+        simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0),
+                                    axis=-1)
         simulated = utils.crop_image(simulated, roi_res)
         return error(simulated, captured)
 
     def _loss_mse(params):
         simulated = apply(params, phase)
-        simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0), axis=-1)
+        simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0),
+                                    axis=-1)
         simulated = utils.crop_image(simulated, roi_res)
         return mse(simulated, captured)
 
@@ -137,28 +157,38 @@ def train_step(optimizer, batch, error=mse, update=True, return_amp=False, compu
         loss_mse = None
     if return_amp:
         model_amp = apply(params, phase)
-        model_amp = jnp.expand_dims(jnp.expand_dims(model_amp, axis=0), axis=-1)
+        model_amp = jnp.expand_dims(jnp.expand_dims(model_amp, axis=0),
+                                    axis=-1)
         model_amp = utils.crop_image(model_amp, roi_res)
     else:
         model_amp = None
 
     return optimizer, loss, loss_mse, model_amp
 
+
 # phase, captured images Loader
 training_phases = ['train']
-train_loader = torch.utils.data.DataLoader(PairsLoader(os.path.join(opt.phase_path, 'train'),
-                                                       os.path.join(opt.captured_path, 'train'),
-                                                       channel=channel, image_res=image_res,
-                                                       shuffle=True, sled=opt.sled), batch_size=1,
-                                                       num_workers=8)
+train_loader = torch.utils.data.DataLoader(PairsLoader(
+    os.path.join(opt.phase_path, 'train'),
+    os.path.join(opt.captured_path, 'train'),
+    channel=channel,
+    image_res=image_res,
+    shuffle=True,
+    sled=opt.sled),
+                                           batch_size=1,
+                                           num_workers=8)
 loaders = {'train': train_loader}
 # run validation every epoch.
 training_phases.append('val')
-loaders['val'] = torch.utils.data.DataLoader(PairsLoader(os.path.join(opt.phase_path, 'val'),
-                                                        os.path.join(opt.captured_path, 'val'),
-                                                       channel=channel, image_res=image_res,
-                                                       shuffle=True, sled=opt.sled), batch_size=1,
-                                                       num_workers=8)
+loaders['val'] = torch.utils.data.DataLoader(PairsLoader(
+    os.path.join(opt.phase_path, 'val'),
+    os.path.join(opt.captured_path, 'val'),
+    channel=channel,
+    image_res=image_res,
+    shuffle=True,
+    sled=opt.sled),
+                                             batch_size=1,
+                                             num_workers=8)
 
 # tensorboard writer
 summaries_dir = os.path.join(opt.tb_path, run_id)
@@ -201,11 +231,19 @@ for e in range(opt.num_epochs):
             return_amp = i % tensorboard_im_freq == 0 and opt.tb_image
             compute_mse = i % tensorboard_freq == 0
             if phase == 'train':
-                optimizer, loss, loss_mse, model_amp = train_step(optimizer, batch, update=True,
-                                                        compute_mse=compute_mse, return_amp=return_amp)
+                optimizer, loss, loss_mse, model_amp = train_step(
+                    optimizer,
+                    batch,
+                    update=True,
+                    compute_mse=compute_mse,
+                    return_amp=return_amp)
             elif phase == 'val':
-                optimizer, loss, loss_mse, model_amp = train_step(optimizer, batch, update=False,
-                                                        compute_mse=compute_mse, return_amp=return_amp)
+                optimizer, loss, loss_mse, model_amp = train_step(
+                    optimizer,
+                    batch,
+                    update=False,
+                    compute_mse=compute_mse,
+                    return_amp=return_amp)
 
             # write to tensorboard
             with torch.no_grad():
@@ -213,42 +251,52 @@ for e in range(opt.num_epochs):
                     writer.add_scalar(f'Loss_{phase}/objective', loss, i_acc)
                     writer.add_scalar(f'Loss_{phase}/L2', loss_mse, i_acc)
 
-                    model_amp = model_amp[...,0]
-                    captured_amp = captured_amp[...,0]
+                    model_amp = model_amp[..., 0]
+                    captured_amp = captured_amp[..., 0]
                     max_amp = max(model_amp.max(), captured_amp.max())
 
                     if i % tensorboard_im_freq == 0 and opt.tb_image:
-                        writer.add_image(f'{phase}/recon_{f}', model_amp / max_amp, i_acc)
-                        writer.add_image(f'{phase}/captured_{f}', captured_amp / max_amp, i_acc)
+                        writer.add_image(f'{phase}/recon_{f}',
+                                         model_amp / max_amp, i_acc)
+                        writer.add_image(f'{phase}/captured_{f}',
+                                         captured_amp / max_amp, i_acc)
 
                     # Compute SRGB PSNR on GPU
                     psnr_srgb = helper.psnr_srgb(model_amp, captured_amp)
 
                     if phase == 'val':
                         psnr_list.append(psnr_srgb.item())
-                    writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb.item(), i_acc)
+                    writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb.item(),
+                                      i_acc)
 
                 i_acc += 1
                 running_loss += loss
                 running_loss_mse += loss_mse
 
-            running_losses[phase] = running_loss / len(loader)  # average loss over epoch
-            running_losses_mse[phase] = running_loss_mse / len(loader)  # average mse loss over epoch
+            running_losses[phase] = running_loss / len(
+                loader)  # average loss over epoch
+            running_losses_mse[phase] = running_loss_mse / len(
+                loader)  # average mse loss over epoch
 
         with torch.no_grad():
             # report every epoch
-            writer.add_scalars('Loss_per_epoch/objective', running_losses, e + 1)
+            writer.add_scalars('Loss_per_epoch/objective', running_losses,
+                               e + 1)
             writer.add_scalars('Loss_per_epoch/L2', running_losses_mse, e + 1)
 
             if phase == 'val':
-                writer.add_scalar(f'Validation_PSNR_per_epoch/average', statistics.mean(psnr_list), e + 1)
-                writer.add_scalar(f'Validation_PSNR_per_epoch/std_dev', statistics.stdev(psnr_list), e + 1)
-                writer.add_scalar(f'Validation_PSNR_per_epoch/min', min(psnr_list), e + 1)
-                writer.add_scalar(f'Validation_PSNR_per_epoch/max', max(psnr_list), e + 1)
+                writer.add_scalar(f'Validation_PSNR_per_epoch/average',
+                                  statistics.mean(psnr_list), e + 1)
+                writer.add_scalar(f'Validation_PSNR_per_epoch/std_dev',
+                                  statistics.stdev(psnr_list), e + 1)
+                writer.add_scalar(f'Validation_PSNR_per_epoch/min',
+                                  min(psnr_list), e + 1)
+                writer.add_scalar(f'Validation_PSNR_per_epoch/max',
+                                  max(psnr_list), e + 1)
 
         # save model, every epoch
         bytes_output = serialization.to_bytes(optimizer.target)
-        ofile = open(os.path.join(model_path, f'{run_id}_model_{e+1}epoch.pth'), 'wb')
+        ofile = open(
+            os.path.join(model_path, f'{run_id}_model_{e+1}epoch.pth'), 'wb')
         ofile.write(byte_output)
         ofile.close()
-

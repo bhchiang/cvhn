@@ -142,7 +142,7 @@ class UNetSkipConnectionBlock(nn.Module):
 
     def setup(self):
         # TODO: fix padding consistency issues
-        if mode == Mode.COMPLEX:
+        if self.mode == Mode.COMPLEX:
             self.down_conv = nn.Conv(
                 features=self.down_nc,
                 kernel_size=(5, 5),
@@ -316,7 +316,7 @@ class PropagationCNN(nn.Module):
         # Define number of input and output channels
         input_nc_target = output_nc_target = 1
 
-        if mode == Mode.STACKED_COMPLEX:
+        if self.mode == Mode.STACKED_COMPLEX:
             input_nc_target = output_nc_target = 2
 
         self.input_nc_target = input_nc_target
@@ -338,7 +338,7 @@ class PropagationCNN(nn.Module):
 
         unet = UNet(input_nc_target=input_nc_target,
                     output_nc_target=output_nc_target,
-                    mode=mode)
+                    mode=self.mode)
         self.unet = unet
 
     def _padding(self, a, b):
