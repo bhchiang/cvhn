@@ -388,17 +388,21 @@ class PropagationCNN(nn.Module):
         out = self.unet(z)
 
         # Crop back to original resolution
-        # Remove channel axis = -1
-        out = out.reshape(self.target_resolution)
-        out = asm._crop(out, pad_y, pad_x)
+        # TODO: fix _pad such that it generalizes to any number of dimension
+        if self.mode != Mode.STACKED_COMPLEX:
+            out = out.reshape(self.target_resolution)
+            out = asm._crop(out, pad_y, pad_x)
 
-        # Get amplitude of output depending on the mode
-        if self.mode == Mode.AMPLITUDE:
-            return out
-        elif self.mode == Mode.STACKED_COMPLEX:
-            return jnp.sqrt(out[..., 0]**2 + out[..., 1]**2)
-        elif self.mode == Mode.COMPLEX:
-            return jnp.abs(out)
+            # Get amplitude of output depending on the mode
+            if self.mode == Mode.AMPLITUDE:
+                return out
+
+            elif self.mode == Mode.COMPLEX:
+                return jnp.abs(out)
+        else:
+            out_r = asm._crop(out[..., 0], pad_y, pad_x)
+            out_i = asm._crop(out[..., 1], pad_y, pad_x)
+            return jnp.sqrt(out_i**2 + out_i**2)
 
 
 if __name__ == "__main__":
@@ -407,7 +411,7 @@ if __name__ == "__main__":
     captured = io.imread(
         "sample_pairs/captured/10_0_5.png")  # Intermediate plane
 
-    mode = Mode.STACKED_COMPLEX
+    mode = Mode.COMPLEX
     print(phase.shape, phase.dtype)
 
     key = random.PRNGKey(0)
