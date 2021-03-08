@@ -32,7 +32,7 @@ from phase_capture_loader import PhaseCaptureLoader
 from tensorboardX import SummaryWriter
 import train_helper as helper
 from models import PropagationCNN
-from flax import serialization
+from flax import serialization, optim
 from jax import jit
 from skimage import io
 from jax import random
@@ -88,7 +88,7 @@ model = PropagationCNN(mode=mode, d=prop_dist)
 variables = model.init(key, phase)
 
 
-@jax.jit
+@jit
 def apply(variables, phase):
     return model.apply(variables, phase)
 
