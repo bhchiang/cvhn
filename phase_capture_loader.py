@@ -130,7 +130,7 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
             while self.ind not in self.subset and self.ind < len(self.order):
                 self.ind += 1
 
-        if self.ind < len(self.order):
+        if self.ind < len(self.order)/100:
             phase_idx = self.order[self.ind]
 
             self.ind += 1
@@ -144,7 +144,7 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
         :return length of order
         """
         if self.subset is None:
-            return len(self.order//100)
+            return len(self.order)
         else:
             return len(self.subset)
 

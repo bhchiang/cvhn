@@ -31,7 +31,7 @@ import utils
 from phase_capture_loader import PhaseCaptureLoader
 from tensorboardX import SummaryWriter
 import train_helper as helper
-from models import PropCNN
+from models import PropagationCNN
 from flax import serialization
 
 # Command line argument processing
@@ -58,19 +58,29 @@ slm_res = (1080, 1920)  # resolution of SLM
 image_res = (1080, 1920)  # 1080p dataset
 roi_res = (880, 1600)  # regions of interest (to penalize)
 
-#### TODO: SETUP LOSS ##########
-loss_model = helper.loss_model(opt.loss_type).to(device)
-loss_mse = nn.MSELoss().to(device)
+# Setup Loss Functions
+@jit
+def mse(x, y):
+    return jnp.mean((y - x)**2)
+@jit
+def L1(x, y):
+    return jnp.mean(jnp.abs(y - x))
 
 # Path for data
 model_path = opt.model_path  # path for new model checkpoints
 utils.cond_mkdir(model_path)
 
 # Initialize model
-model = PropCNN(dist, feature_size=feature_size, wavelength=wavelength,
-                image_res=image_res, outer_skip=opt.outer_skip, target_network=opt.target_network,
-                norm=opt.norm, activation=opt.activation)
-params = model.init_params()
+phase = io.imread("sample_pairs/phase/10_0.png")
+captured = io.imread(
+    "sample_pairs/captured/10_0_5.png")  # Intermediate plane
+mode = Mode.COMPLEX
+key = random.PRNGKey(0)
+model = PropagationCNN(mode=mode, d=0.05)
+variables = model.init(key, phase)
+@jax.jit
+def apply(variables, phase):
+    return model.apply(variables, phase)
 
 # Load pretrained model and start from there
 if opt.pretrained_path != '':
@@ -78,10 +88,59 @@ if opt.pretrained_path != '':
     ifile = open(opt.pretrained_path, 'rb')
     bytes_input = ifile.read()
     ifile.close()
-    params = serialization.from_bytes(params, bytes_input)
+    variables = serialization.from_bytes(variables, bytes_input)
 
-#### TODO: SETUP ADAM OPTIMIZER ##########
-optimizer_model = optim.Adam(model.parameters(), lr=opt.lr_model)
+# Setup Optimizer
+@jit
+def create_optimizer(params, learning_rate=0.001):
+    optimizer_def = optim.Adam(learning_rate=learning_rate)
+    optimizer = optimizer_def.create(params)
+    return optimizer
+optimizer = create_optimizer(variables)
+
+# Setup Update step
+@jit
+def train_step(optimizer, batch, error=mse, update=True, return_amp=False, compute_mse=False):
+    # Batch contains a single field, size (1, H, W, C)
+
+    # You can swap out the error function depending on the network type.
+    phase = batch['phase'][0,...,0]  # Input SLM phase
+    captured = batch['captured']  # Label (amplitude)
+
+    def _loss(params):
+        simulated = model.apply(params, phase)
+        simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0), axis=-1)
+        simulated = utils.crop_image(simulated, roi_res)
+        return error(simulated, captured)
+
+    def _loss_mse(params):
+        simulated = model.apply(params, phase)
+        simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0), axis=-1)
+        simulated = utils.crop_image(simulated, roi_res)
+        return mse(simulated, captured)
+
+    if update:
+        # If returning more than loss from _loss, set has_aux=True
+        # holomorphic=True if doing complex optimization (?)
+        grad_fn = jax.value_and_grad(_loss)
+
+        # out is the simulated result from our model, not necessary
+        loss, grad = grad_fn(optimizer.target)
+        optimizer = optimizer.apply_gradient(grad)
+    else:
+        loss = _loss(params)
+    if compute_mse:
+        loss_mse = _loss_mse(params)
+    else:
+        loss_mse = None
+    if return_amp:
+        model_amp = model.apply(params, phase)
+        model_amp = jnp.expand_dims(jnp.expand_dims(model_amp, axis=0), axis=-1)
+        model_amp = utils.crop_image(model_amp, roi_res)
+    else:
+        model_amp = None
+
+    return optimizer, loss, loss_mse, model_amp
 
 # phase, captured images Loader
 training_phases = ['train']
@@ -103,7 +162,7 @@ loaders['val'] = torch.utils.data.DataLoader(PairsLoader(os.path.join(opt.phase_
 summaries_dir = os.path.join(opt.tb_path, run_id)
 utils.cond_mkdir(summaries_dir)
 writer = SummaryWriter(f'{summaries_dir}')
-
+tensorboard_im_freq = 10000
 i_acc = 0
 for e in range(opt.num_epochs):
     print(f'   - Epoch {e+1} ...')
@@ -132,41 +191,31 @@ for e in range(opt.num_epochs):
             slm_phase = jnp.array(slm_phase)
             captured_amp = jnp.array(captured_amp)
             captured_amp = utils.crop_image(captured_amp, roi_res)
+            batch = {
+                'phase': slm_phase,  # (H, W)
+                'captured': captured_amp,  # (H, W)
+            }
 
+            return_amp = i % tensorboard_im_freq == 0 and opt.tb_image
+            compute_mse = i % tensorboard_freq == 0
             if phase == 'train':
-                # propagate forward through the model and crop to roi
-                model_amp = model.apply(slm_phase, params)  # Should return (1, 1, *image_res) shape amplitude
-                model_amp = utils.crop_image(model_amp, target_shape=roi_res)
-
-                ### TODO: UPDATE LOSS COMPUTATION AND BACKWARDS###
-                # calculate loss and backpropagate to model parameters
-                loss_value_model = loss_model(model_amp, captured_amp)
-                loss_value_model.backward()
-                with torch.no_grad():
-                    loss_mse_value_model = loss_mse(model_amp, captured_amp)
-                optimizer_model.step()
+                optimizer, loss, loss_mse, model_amp = train_step(optimizer, batch, update=True,
+                                                        compute_mse=compute_mse, return_amp=return_amp)
             elif phase == 'val':
-                ### TODO: UPDATE LOSS COMPUTATION AND WITH NO GRADIENT GRAPH###
-                with torch.no_grad():
-                    # propagate forward through the model
-                    model_amp = model.apply(slm_phase)  # Should return (1, 1, *image_res) shape amplitude
-                    model_amp = utils.crop_image(model_amp, target_shape=roi_res)
-
-                    # calculate loss and backpropagate to model parameters
-                    loss_value_model = loss_model(model_amp, captured_amp)
-                    loss_mse_value_model = loss_mse(model_amp, captured_amp)
+                optimizer, loss, loss_mse, model_amp = train_step(optimizer, batch, update=False,
+                                                        compute_mse=compute_mse, return_amp=return_amp)
 
             # write to tensorboard
             with torch.no_grad():
                 if i % tensorboard_freq == 0:
-                    writer.add_scalar(f'Loss_{phase}/objective', loss_value_model.item(), i_acc)
-                    writer.add_scalar(f'Loss_{phase}/L2', loss_mse_value_model.item(), i_acc)
+                    writer.add_scalar(f'Loss_{phase}/objective', loss, i_acc)
+                    writer.add_scalar(f'Loss_{phase}/L2', loss_mse, i_acc)
 
                     model_amp = model_amp[...,0]
                     captured_amp = captured_amp[...,0]
                     max_amp = max(model_amp.max(), captured_amp.max())
 
-                    if i % 10000 == 0 and opt.tb_image:
+                    if i % tensorboard_im_freq == 0 and opt.tb_image:
                         writer.add_image(f'{phase}/recon_{f}', model_amp / max_amp, i_acc)
                         writer.add_image(f'{phase}/captured_{f}', captured_amp / max_amp, i_acc)
 
@@ -178,8 +227,8 @@ for e in range(opt.num_epochs):
                     writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb.item(), i_acc)
 
                 i_acc += 1
-                running_loss += loss_value_model.item()
-                running_loss_mse += loss_mse_value_model.item()
+                running_loss += loss
+                running_loss_mse += loss_mse
 
             running_losses[phase] = running_loss / len(loader)  # average loss over epoch
             running_losses_mse[phase] = running_loss_mse / len(loader)  # average mse loss over epoch
