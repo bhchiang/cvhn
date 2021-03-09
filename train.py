@@ -59,13 +59,13 @@ print(f'   - Training forward propagation model...')
 cm, mm, um, nm = 1e-2, 1e-3, 1e-6, 1e-9
 prop_dist = helper.prop_dist(opt.channel, opt.sled)  # propagation distances
 wavelength = (636.4 * nm, 517.7 * nm, 440.8 * nm)[channel]
+
 if opt.sled:
     wavelength = (634.8 * nm, 510 * nm, 450 * nm)[channel]
 feature_size = (6.4 * um, 6.4 * um)  # SLM pitch
 slm_res = (1080, 1920)  # resolution of SLM
 image_res = (1080, 1920)  # 1080p dataset
 roi_res = (880, 1600)  # regions of interest (to penalize)
-
 
 # Setup Loss Functions
 roi_mask = jnp.ones((1, *image_res, 1), jnp.float32)
@@ -74,16 +74,19 @@ roi_mask = utils.pad_image(utils.crop_image(roi_mask, roi_res), image_res)
 # Initialize model
 im = imread(os.path.join(os.path.join(opt.phase_path, 'test'), "10_0.png"))
 im = (1 - im / np.iinfo(np.uint8).max) * 2 * np.pi - np.pi
-phase = jnp.array(torch.tensor(im, dtype=torch.float32).reshape(*im.shape, 1))[...,0]
+phase = jnp.array(torch.tensor(im, dtype=torch.float32).reshape(*im.shape,
+                                                                1))[..., 0]
 mode = helper.get_mode(opt.target_network)
 print(f'Mode set: {mode}')
 key = random.PRNGKey(0)
 model = PropagationCNN(mode=mode, d=prop_dist)
 variables = model.init(key, phase)
 
+
 @jit
 def apply(variables, phase):
     return model.apply(variables, phase)
+
 
 # Setup optimizer
 def create_optimizer(params, learning_rate=opt.lr_model):
@@ -91,18 +94,23 @@ def create_optimizer(params, learning_rate=opt.lr_model):
     optimizer = optimizer_def.create(params)
     return optimizer
 
+
 @jit
 def mse(x, y):
-    return jnp.mean(roi_mask*((y - x)**2))
-    
+    return jnp.mean(roi_mask * ((y - x)**2))
+
+
 if opt.loss_type.lower() == 'l1':
+
     @jit
     def loss_train(x, y):
-        return jnp.mean(roi_mask*jnp.abs(y - x))
+        return jnp.mean(roi_mask * jnp.abs(y - x))
 elif opt.loss_type.lower() == 'l2':
+
     @jit
     def loss_train(x, y):
-        return jnp.mean(roi_mask*((y - x)**2))
+        return jnp.mean(roi_mask * ((y - x)**2))
+
 
 # Path for data
 model_path = opt.model_path  # path for new model checkpoints
@@ -115,6 +123,7 @@ if opt.pretrained_path != '':
     bytes_input = ifile.read()
     ifile.close()
     variables = serialization.from_bytes(variables, bytes_input)
+
 
 # Setup Update step
 @jit
@@ -139,6 +148,7 @@ def train_step(optimizer, batch):
 
     return optimizer, loss
 
+
 @jit
 def val_step(optimizer, batch):
     # Batch contains a single field, size (1, H, W, C)
@@ -149,12 +159,14 @@ def val_step(optimizer, batch):
         simulated = apply(params, phase)
         simulated = jnp.expand_dims(jnp.expand_dims(simulated, axis=0),
                                     axis=-1)
-        return simulated, loss_train(simulated, captured), mse(simulated, captured)
+        return simulated, loss_train(simulated,
+                                     captured), mse(simulated, captured)
 
     simulated, loss, loss_mse = _val_forward(optimizer.target)
 
     return simulated, loss, loss_mse
-    
+
+
 @jit
 def compute_mse(optimizer, batch):
     # Batch contains a single field, size (1, H, W, C)
@@ -172,6 +184,7 @@ def compute_mse(optimizer, batch):
     loss_mse = _loss_mse(optimizer.target)
     return loss_mse
 
+
 @jit
 def get_predicted_amp(optimizer, batch):
     # Batch contains a single field, size (1, H, W, C)
@@ -181,9 +194,9 @@ def get_predicted_amp(optimizer, batch):
     captured = batch['captured']  # Label (amplitude)
 
     model_amp = apply(optimizer.target, phase)
-    model_amp = jnp.expand_dims(jnp.expand_dims(model_amp, axis=0),
-                                axis=-1)
+    model_amp = jnp.expand_dims(jnp.expand_dims(model_amp, axis=0), axis=-1)
     return model_amp
+
 
 # Create Optimizer
 optimizer = create_optimizer(variables, learning_rate=opt.lr_model)
@@ -240,6 +253,7 @@ for e in range(opt.num_epochs):
             slm_phase, captured_amp = phase_capture
             slm_phase = jnp.array(slm_phase)
             captured_amp = jnp.array(captured_amp)
+
             batch = {
                 'phase': slm_phase,  # (H, W)
                 'captured': captured_amp,  # (H, W)
@@ -256,8 +270,10 @@ for e in range(opt.num_epochs):
 
             # write to tensorboard
             if i % tensorboard_freq == 0:
-                writer.add_scalar(f'Loss_{phase}/objective', loss, i_acc)
-                writer.add_scalar(f'Loss_{phase}/L2', loss_mse, i_acc)
+                writer.add_scalar(f'Loss_{phase}/objective', np.array(loss),
+                                  i_acc)
+                writer.add_scalar(f'Loss_{phase}/L2', np.array(loss_mse),
+                                  i_acc)
 
                 captured_amp = utils.crop_image(captured_amp, roi_res)
                 model_amp = utils.crop_image(model_amp, roi_res)
@@ -266,18 +282,18 @@ for e in range(opt.num_epochs):
                 max_amp = max(model_amp.max(), captured_amp.max())
 
                 if i % tensorboard_im_freq == 0 and opt.tb_image:
-                    writer.add_image(f'{phase}/recon_{f}',
-                                        model_amp / max_amp, i_acc)
-                    writer.add_image(f'{phase}/captured_{f}',
-                                        captured_amp / max_amp, i_acc)
+                    writer.add_image(f'{phase}/recon_{i}',
+                                     np.array(model_amp / max_amp), i_acc)
+                    writer.add_image(f'{phase}/captured_{i}',
+                                     np.array(captured_amp / max_amp), i_acc)
 
                 # Compute SRGB PSNR on GPU
-                psnr_srgb = helper.psnr_srgb(model_amp, captured_amp)
+                # psnr_srgb = helper.psnr_srgb(model_amp, captured_amp)
 
-                if phase == 'val':
-                    psnr_list.append(psnr_srgb.item())
-                writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb.item(),
-                                    i_acc)
+                # if phase == 'val':
+                #     psnr_list.append(psnr_srgb.item())
+                # writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb.item(),
+                #                   i_acc)
 
             i_acc += 1
             running_loss += loss
@@ -289,19 +305,18 @@ for e in range(opt.num_epochs):
                 loader)  # average mse loss over epoch
 
         # report every epoch
-        writer.add_scalars('Loss_per_epoch/objective', running_losses,
-                            e + 1)
+        writer.add_scalars('Loss_per_epoch/objective', running_losses, e + 1)
         writer.add_scalars('Loss_per_epoch/L2', running_losses_mse, e + 1)
 
-        if phase == 'val':
-            writer.add_scalar(f'Validation_PSNR_per_epoch/average',
-                                statistics.mean(psnr_list), e + 1)
-            writer.add_scalar(f'Validation_PSNR_per_epoch/std_dev',
-                                statistics.stdev(psnr_list), e + 1)
-            writer.add_scalar(f'Validation_PSNR_per_epoch/min',
-                                min(psnr_list), e + 1)
-            writer.add_scalar(f'Validation_PSNR_per_epoch/max',
-                                max(psnr_list), e + 1)
+        # if phase == 'val':
+        #     writer.add_scalar(f'Validation_PSNR_per_epoch/average',
+        #                       statistics.mean(psnr_list), e + 1)
+        #     writer.add_scalar(f'Validation_PSNR_per_epoch/std_dev',
+        #                       statistics.stdev(psnr_list), e + 1)
+        #     writer.add_scalar(f'Validation_PSNR_per_epoch/min', min(psnr_list),
+        #                       e + 1)
+        #     writer.add_scalar(f'Validation_PSNR_per_epoch/max', max(psnr_list),
+        #                       e + 1)
 
         # save model, every epoch
         bytes_output = serialization.to_bytes(optimizer.target)
