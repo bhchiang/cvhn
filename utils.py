@@ -1,5 +1,7 @@
 import os
 from jax import numpy as jnp
+import numpy as np
+from jax import jit
 
 def cond_mkdir(path):
     """
@@ -22,26 +24,26 @@ def str2bool(v):
     else:
         raise ValueError('Boolean value expected.')
 
-def im2float(im, dtype=jnp.float32):
+def im2float(im, dtype=np.float32):
     """convert uint16 or uint8 image to float32, with range scaled to 0-1
     :param im: image
     :param dtype: default jnp.float32
     :return im: image converted to specified dtype
     """
-    if issubclass(im.dtype.type, jnp.floating):
+    if issubclass(im.dtype.type, np.floating):
         return im.astype(dtype)
-    elif issubclass(im.dtype.type, jnp.integer):
-        return im / dtype(jnp.iinfo(im.dtype).max)
+    elif issubclass(im.dtype.type, np.integer):
+        return im / dtype(np.iinfo(im.dtype).max)
     else:
         raise ValueError(f'Unsupported data type {im.dtype}')
 
 
 def pad_image(field, target_shape, padval=0):
     """
-    :param field: input field
-    :param target_shape: desired shape for output
+    :param field: input field (N, H, W, C)
+    :param target_shape: desired shape for output (H', W')
     :param padval: value to pad the input field with
-    :return field: output field with desired shape
+    :return field: output field with desired shape (N, H', W', C)
     """
     size_diff = jnp.array(target_shape) - jnp.array(field.shape[-3:-1])
     odd_dim = jnp.array(field.shape[-3:-1]) % 2
@@ -52,21 +54,18 @@ def pad_image(field, target_shape, padval=0):
         pad_front = (pad_total + odd_dim) // 2
         pad_end = (pad_total + 1 - odd_dim) // 2
 
-        leading_dims = field.ndim - 3  # only pad the middle two dims
-        if leading_dims > 0:
-            pad_front = jnp.concatenate(([0] * leading_dims, pad_front, 0))
-            pad_end = jnp.concatenate(([0] * leading_dims, pad_end, 0))
+        pad_front = jnp.array([0, *pad_front, 0])
+        pad_end = jnp.array([0, *pad_end, 0])
         return jnp.pad(field, tuple(zip(pad_front, pad_end)), 'constant',
                         constant_values=padval)
     else:
         return field
 
-
 def crop_image(field, target_shape):
     """
-    :param field: input field
-    :param target_shape: desired shape for output
-    :return field: output field with desired shape
+    :param field: input field (N, H, W, C)
+    :param target_shape: desired shape for output (H', W')
+    :return field: output field with desired shape (N, H', W', C)
     """
     size_diff = jnp.array(field.shape[-3:-1]) - jnp.array(target_shape)
     odd_dim = jnp.array(field.shape[-3:-1]) % 2
@@ -77,8 +76,6 @@ def crop_image(field, target_shape):
         crop_front = (crop_total + 1 - odd_dim) // 2
         crop_end = (crop_total + odd_dim) // 2
 
-        crop_slices = [slice(int(f), int(-e) if e else None)
-                       for f, e in zip(crop_front, crop_end)]
-        return jnp.expand_dims(field[...,0][(..., *crop_slices)], axis=-1)
+        return field[:, crop_front[0]:-crop_end[0], crop_front[1]:-crop_end[1], :]
     else:
         return field

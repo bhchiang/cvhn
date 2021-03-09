@@ -2,6 +2,7 @@ import os
 import torch
 import random
 from jax import numpy as jnp
+import numpy as np
 from imageio import imread
 import skimage.io
 import utils
@@ -130,7 +131,7 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
             while self.ind not in self.subset and self.ind < len(self.order):
                 self.ind += 1
 
-        if self.ind < len(self.order)/100:
+        if self.ind < len(self.order):
             phase_idx = self.order[self.ind]
 
             self.ind += 1
@@ -159,16 +160,15 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
         """
 
         im = imread(self.im_names[filenum])
-        im = (1 - im / jnp.iinfo(jnp.uint8).max) * 2 * jnp.pi - jnp.pi
-        phase_im = jnp.expand_dims(im, axis=-1).astype(jnp.float32)
-        phase_im = torch.tensor(phase_im)
+        im = (1 - im / np.iinfo(np.uint8).max) * 2 * np.pi - np.pi
+        phase_im = torch.tensor(im, dtype=torch.float32).reshape(*im.shape, 1)
 
         _, captured_filename = os.path.split(os.path.splitext(self.im_names[filenum])[0])
         idx = captured_filename.split('/')[-1]
 
         captured_filename = os.path.join(self.captured_path, f'{idx}_5.png') # Extract only the intermediate plane
-        captured_intensity = jnp.sqrt(utils.im2float(skimage.io.imread(captured_filename)))
-        captured_intensity = jnp.expand_dims(captured_intensity, axis=-1)
-        captured_intensity = torch.tensor(captured_intensity)
+        captured_intensity = utils.im2float(skimage.io.imread(captured_filename))
+        captured_intensity = torch.tensor(captured_intensity, dtype=torch.float32).reshape(*im.shape, 1)
+        captured_amp = torch.sqrt(captured_intensity)
 
         return (phase_im, captured_amp)
