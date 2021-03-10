@@ -292,7 +292,7 @@ for e in range(opt.num_epochs):
 
                 # if phase == 'val':
                 #     psnr_list.append(psnr_srgb.item())
-                # writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb.item(),
+                # writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb,
                 #                   i_acc)
 
             i_acc += 1

@@ -188,12 +188,12 @@ class UNetSkipConnectionBlock(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        print(
-            f"\nSkip block, layer index = {self.layer_index}, down_nc = {self.down_nc}, up_nc = {self.up_nc}, x.shape = {x.shape}"
-        )
+        # print(
+        #     f"\nSkip block, layer index = {self.layer_index}, down_nc = {self.down_nc}, up_nc = {self.up_nc}, x.shape = {x.shape}"
+        # )
         # embed()
         out = self.down_conv(x)
-        print(f"After down conv, out.shape = {out.shape}")
+        # print(f"After down conv, out.shape = {out.shape}")
 
         if not self.layer_index in [7, 8]:
             out = self.down_norm(out)
@@ -205,7 +205,7 @@ class UNetSkipConnectionBlock(nn.Module):
             out = self.submodule(out)
 
         out = self.up_conv(out)
-        print(f"After up conv, out.shape = {out.shape}")
+        # print(f"After up conv, out.shape = {out.shape}")
 
         if not self.layer_index in [7, 8]:
             out = self.up_norm(out)
@@ -216,12 +216,12 @@ class UNetSkipConnectionBlock(nn.Module):
         if self.use_dropout:
             out = nn.Dropout(rate=0.5)
 
-        print(f"Before skip: out.shape = {out.shape}, x.shape = {x.shape}")
+        # print(f"Before skip: out.shape = {out.shape}, x.shape = {x.shape}")
 
         # Concatenate along the last axis (channels assuming NHWC)
         out = jnp.dstack((x, out))
 
-        print(f"After skip: out.shape = {out.shape}, x.shape = {x.shape}\n")
+        # print(f"After skip: out.shape = {out.shape}, x.shape = {x.shape}\n")
         return out
 
 
@@ -243,7 +243,7 @@ class UNet(nn.Module):
     up: jnp.ndarray = jnp.array([512, 512, 512, 512, 256, 128, 64, 32])
 
     def setup(self):
-        print(f"Mode = {self.mode}")
+        # print(f"Mode = {self.mode}")
         """
         For the true complex network (Mode.COMPLEX), all layers must be explicity initialized with
         complex weights and biases.
@@ -367,7 +367,7 @@ class PropagationCNN(nn.Module):
 
         # Crop back to self.field_resolution
         z = asm._crop(z, pad_y, pad_x)
-        print(f"Ideal reconstruction shape = {z.shape}")
+        # print(f"Ideal reconstruction shape = {z.shape}")
 
         # Send through U-Net to correct for output at our target plane
         # Pad to target resolution
