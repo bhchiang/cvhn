@@ -15,13 +15,16 @@ def get_image_filenames(dir, focuses=None):
         files = os.listdir(dir)
         exts = (os.path.splitext(f)[1] for f in files)
         if focuses is not None:
-            images = [os.path.join(dir, f)
-                      for e, f in zip(exts, files)
-                      if e[1:] in image_types and int(os.path.splitext(f)[0].split('_')[-1]) in focuses]
+            images = [
+                os.path.join(dir, f) for e, f in zip(exts, files)
+                if e[1:] in image_types
+                and int(os.path.splitext(f)[0].split('_')[-1]) in focuses
+            ]
         else:
-            images = [os.path.join(dir, f)
-                      for e, f in zip(exts, files)
-                      if e[1:] in image_types]
+            images = [
+                os.path.join(dir, f) for e, f in zip(exts, files)
+                if e[1:] in image_types
+            ]
         return images
     elif isinstance(dir, list):
         # Suppport multiple directories (randomly shuffle all)
@@ -29,9 +32,10 @@ def get_image_filenames(dir, focuses=None):
         for folder in dir:
             files = os.listdir(folder)
             exts = (os.path.splitext(f)[1] for f in files)
-            images_in_folder = [os.path.join(folder, f)
-                                for e, f in zip(exts, files)
-                                if e[1:] in image_types]
+            images_in_folder = [
+                os.path.join(folder, f) for e, f in zip(exts, files)
+                if e[1:] in image_types
+            ]
             images = [*images, *images_in_folder]
         return images
 
@@ -42,9 +46,11 @@ def get_image_filenames_without_focus(dir, capture_dir):
     if isinstance(dir, str):
         files = os.listdir(capture_dir)
         exts = (os.path.splitext(f)[1] for f in files)
-        images = [os.path.join(dir, f'{f.split("_")[0]}_{f.split("_")[1]}.png')
-                      for e, f in zip(exts, files)
-                      if e[1:] in image_types and f'{f.split("_")[0]}_{f.split("_")[1]}.png' in os.listdir(dir)]
+        images = [
+            os.path.join(dir, f'{f.split("_")[0]}_{f.split("_")[1]}.png')
+            for e, f in zip(exts, files) if e[1:] in image_types
+            and f'{f.split("_")[0]}_{f.split("_")[1]}.png' in os.listdir(dir)
+        ]
         print(len(images))
         images = list(set(list))
         print(len(images))
@@ -84,8 +90,15 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
     idx: the index for the image to load, indices are alphabetical based on the
         file path.
     """
-    def __init__(self, phase_path, captured_path, channel=None, batch_size=1,
-                 image_res=(1080, 1920), shuffle=True, idx_subset=None, sled=False):
+    def __init__(self,
+                 phase_path,
+                 captured_path,
+                 channel=None,
+                 batch_size=1,
+                 image_res=(1080, 1920),
+                 shuffle=True,
+                 idx_subset=None,
+                 sled=False):
         # Set path for loading data
         if not os.path.isdir(phase_path):
             raise NotADirectoryError(f'Data folder: {phase_path}')
@@ -100,7 +113,8 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
         self.image_res = image_res
         self.subset = idx_subset
         if sled:
-            self.im_names = get_image_filenames_without_focus(phase_path, captured_path)
+            self.im_names = get_image_filenames_without_focus(
+                phase_path, captured_path)
         else:
             self.im_names = get_image_filenames(phase_path)
         self.im_names.sort()
@@ -109,9 +123,8 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
             self.shuffle = False
             self.batch_size = 1
         # create list of image IDs
-        self.order = ((i,) for i in range(len(self.im_names)))
+        self.order = ((i, ) for i in range(len(self.im_names)))
         self.order = list(self.order)
-
 
     def __iter__(self):
         """
@@ -121,7 +134,6 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
         if self.shuffle:
             random.shuffle(self.order)
         return self
-
 
     def __next__(self):
         """
@@ -139,7 +151,6 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
         else:
             raise StopIteration
 
-
     def __len__(self):
         """
         :return length of order
@@ -148,7 +159,6 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
             return len(self.order)
         else:
             return len(self.subset)
-
 
     def load_pair(self, filenum):
         """
@@ -163,12 +173,18 @@ class PhaseCaptureLoader(torch.utils.data.IterableDataset):
         im = (1 - im / np.iinfo(np.uint8).max) * 2 * np.pi - np.pi
         phase_im = torch.tensor(im, dtype=torch.float32).reshape(*im.shape, 1)
 
-        _, captured_filename = os.path.split(os.path.splitext(self.im_names[filenum])[0])
+        _, captured_filename = os.path.split(
+            os.path.splitext(self.im_names[filenum])[0])
         idx = captured_filename.split('/')[-1]
 
-        captured_filename = os.path.join(self.captured_path, f'{idx}_5.png') # Extract only the intermediate plane
-        captured_intensity = utils.im2float(skimage.io.imread(captured_filename))
-        captured_intensity = torch.tensor(captured_intensity, dtype=torch.float32).reshape(*im.shape, 1)
+        captured_filename = os.path.join(
+            self.captured_path,
+            f'{idx}_5.png')  # Extract only the intermediate plane
+        captured_intensity = utils.im2float(
+            skimage.io.imread(captured_filename))
+        captured_intensity = torch.tensor(captured_intensity,
+                                          dtype=torch.float32).reshape(
+                                              *im.shape, 1)
         captured_amp = torch.sqrt(captured_intensity)
 
-        return (phase_im, captured_amp)
+        return (phase_im, captured_amp, captured_filename)

@@ -3,13 +3,15 @@ from jax import numpy as jnp
 import numpy as np
 from jax import jit
 
+
 def cond_mkdir(path):
     """
     create directory if it does not already exist
     """
     if not os.path.exists(path):
         os.makedirs(path)
-        
+
+
 def str2bool(v):
     """ Simple query parser for configArgParse (which doesn't support native bool from cmd)
     Ref: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
@@ -23,6 +25,7 @@ def str2bool(v):
         return False
     else:
         raise ValueError('Boolean value expected.')
+
 
 def im2float(im, dtype=np.float32):
     """convert uint16 or uint8 image to float32, with range scaled to 0-1
@@ -56,10 +59,13 @@ def pad_image(field, target_shape, padval=0):
 
         pad_front = jnp.array([0, *pad_front, 0])
         pad_end = jnp.array([0, *pad_end, 0])
-        return jnp.pad(field, tuple(zip(pad_front, pad_end)), 'constant',
-                        constant_values=padval)
+        return jnp.pad(field,
+                       tuple(zip(pad_front, pad_end)),
+                       'constant',
+                       constant_values=padval)
     else:
         return field
+
 
 def crop_image(field, target_shape):
     """
@@ -76,6 +82,7 @@ def crop_image(field, target_shape):
         crop_front = (crop_total + 1 - odd_dim) // 2
         crop_end = (crop_total + odd_dim) // 2
 
-        return field[:, crop_front[0]:-crop_end[0], crop_front[1]:-crop_end[1], :]
+        return field[:, crop_front[0]:-crop_end[0],
+                     crop_front[1]:-crop_end[1], :]
     else:
         return field

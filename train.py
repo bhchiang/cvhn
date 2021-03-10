@@ -250,7 +250,7 @@ for e in range(opt.num_epochs):
                 print(f'   - Epoch {e+1}:{i}')
 
             # SLM phase, Captured amp(s), and idxs of corresponding planes
-            slm_phase, captured_amp = phase_capture
+            slm_phase, captured_amp, captured_filename = phase_capture
             slm_phase = jnp.array(slm_phase)
             captured_amp = jnp.array(captured_amp)
 
@@ -274,14 +274,15 @@ for e in range(opt.num_epochs):
                                   i_acc)
                 writer.add_scalar(f'Loss_{phase}/L2', np.array(loss_mse),
                                   i_acc)
-
+                print(captured_amp.shape)
                 captured_amp = utils.crop_image(captured_amp, roi_res)
-                model_amp = utils.crop_image(model_amp, roi_res)
-                model_amp = model_amp[..., 0]
-                captured_amp = captured_amp[..., 0]
-                max_amp = max(model_amp.max(), captured_amp.max())
 
                 if i % tensorboard_im_freq == 0 and opt.tb_image:
+                    print(model_amp.shape, roi_res, captured_filename)
+                    model_amp = utils.crop_image(model_amp, roi_res)
+                    model_amp = model_amp[..., 0]
+                    captured_amp = captured_amp[..., 0]
+                    max_amp = max(model_amp.max(), captured_amp.max())
                     writer.add_image(f'{phase}/recon_{i}',
                                      np.array(model_amp / max_amp), i_acc)
                     writer.add_image(f'{phase}/captured_{i}',
@@ -303,10 +304,13 @@ for e in range(opt.num_epochs):
                 loader)  # average loss over epoch
             running_losses_mse[phase] = running_loss_mse / len(
                 loader)  # average mse loss over epoch
+            break
 
         # report every epoch
-        writer.add_scalars('Loss_per_epoch/objective', running_losses, e + 1)
-        writer.add_scalars('Loss_per_epoch/L2', running_losses_mse, e + 1)
+        writer.add_scalars('Loss_per_epoch/objective',
+                           np.array(running_losses), e + 1)
+        writer.add_scalars('Loss_per_epoch/L2', np.array(running_losses_mse),
+                           e + 1)
 
         # if phase == 'val':
         #     writer.add_scalar(f'Validation_PSNR_per_epoch/average',
