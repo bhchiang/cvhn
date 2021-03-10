@@ -306,25 +306,25 @@ for e in range(opt.num_epochs):
                 loader)  # average mse loss over epoch
             break
 
-        # report every epoch
-        writer.add_scalars('Loss_per_epoch/objective',
-                           np.array(running_losses), e + 1)
-        writer.add_scalars('Loss_per_epoch/L2', np.array(running_losses_mse),
-                           e + 1)
+    # report every epoch
+    # from IPython import embed
+    # embed()
+    writer.add_scalars('Loss_per_epoch/objective', running_losses, e + 1)
+    writer.add_scalars('Loss_per_epoch/L2', running_losses_mse, e + 1)
 
-        # if phase == 'val':
-        #     writer.add_scalar(f'Validation_PSNR_per_epoch/average',
-        #                       statistics.mean(psnr_list), e + 1)
-        #     writer.add_scalar(f'Validation_PSNR_per_epoch/std_dev',
-        #                       statistics.stdev(psnr_list), e + 1)
-        #     writer.add_scalar(f'Validation_PSNR_per_epoch/min', min(psnr_list),
-        #                       e + 1)
-        #     writer.add_scalar(f'Validation_PSNR_per_epoch/max', max(psnr_list),
-        #                       e + 1)
+    # if phase == 'val':
+    #     writer.add_scalar(f'Validation_PSNR_per_epoch/average',
+    #                       statistics.mean(psnr_list), e + 1)
+    #     writer.add_scalar(f'Validation_PSNR_per_epoch/std_dev',
+    #                       statistics.stdev(psnr_list), e + 1)
+    #     writer.add_scalar(f'Validation_PSNR_per_epoch/min', min(psnr_list),
+    #                       e + 1)
+    #     writer.add_scalar(f'Validation_PSNR_per_epoch/max', max(psnr_list),
+    #                       e + 1)
 
-        # save model, every epoch
-        bytes_output = serialization.to_bytes(optimizer.target)
-        ofile = open(
-            os.path.join(model_path, f'{run_id}_model_{e+1}epoch.pth'), 'wb')
-        ofile.write(bytes_output)
-        ofile.close()
+    # save model, every epoch
+    bytes_output = serialization.to_bytes(optimizer.target)
+    ofile = open(os.path.join(model_path, f'{run_id}_model_{e+1}epoch.pth'),
+                 'wb')
+    ofile.write(bytes_output)
+    ofile.close()
