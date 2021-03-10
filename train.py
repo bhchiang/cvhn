@@ -296,8 +296,8 @@ for e in range(opt.num_epochs):
                 #                   i_acc)
 
             i_acc += 1
-            running_loss += loss
-            running_loss_mse += loss_mse
+            running_loss += np.array(loss)
+            running_loss_mse += np.array(loss_mse)
 
             running_losses[phase] = running_loss / len(
                 loader)  # average loss over epoch
@@ -322,5 +322,5 @@ for e in range(opt.num_epochs):
         bytes_output = serialization.to_bytes(optimizer.target)
         ofile = open(
             os.path.join(model_path, f'{run_id}_model_{e+1}epoch.pth'), 'wb')
-        ofile.write(byte_output)
+        ofile.write(bytes_output)
         ofile.close()
