@@ -43,7 +43,7 @@ class Mode(enum.Enum):
 class InstanceNorm(nn.Module):
     @nn.compact
     def __call__(self, x):
-        return nn.GroupNorm(num_groups=None, group_size=1)(x) 
+        return nn.GroupNorm(num_groups=None, group_size=1)(x)
 
 
 class ComplexLayerNorm(nn.Module):
@@ -138,6 +138,7 @@ class UNetSkipConnectionBlock(nn.Module):
     norm_layer: Norm = "instance"
     activation: Activation = "relu"
 
+    outer_skip: bool = True
     use_dropout: bool = False
 
     def setup(self):
@@ -219,9 +220,12 @@ class UNetSkipConnectionBlock(nn.Module):
         # print(f"Before skip: out.shape = {out.shape}, x.shape = {x.shape}")
 
         # Concatenate along the last axis (channels assuming NHWC)
-        out = jnp.dstack((x, out))
-
-        # print(f"After skip: out.shape = {out.shape}, x.shape = {x.shape}\n")
+        if self.layer_index != 8 or self.outer_skip:
+            out = jnp.dstack((x, out))
+        #     print(
+        #         f"After skip: out.shape = {out.shape}, x.shape = {x.shape}\n")
+        # else:
+        #     print(f"{self.layer_index}, skipping!")
         return out
 
 
@@ -267,6 +271,7 @@ class UNet(nn.Module):
                 activation=self.activation,
                 submodule=unet,
                 layer_index=i + 1,
+                outer_skip=self.outer_skip,
             )
 
         self.unet = unet
@@ -311,6 +316,7 @@ class PropagationCNN(nn.Module):
 
     norm: Norm = 'instance'
     activation: Activation = 'relu'
+    outer_skip: bool = True
 
     def setup(self):
         # Define number of input and output channels
@@ -338,7 +344,8 @@ class PropagationCNN(nn.Module):
 
         unet = UNet(input_nc_target=input_nc_target,
                     output_nc_target=output_nc_target,
-                    mode=self.mode)
+                    mode=self.mode,
+                    outer_skip=self.outer_skip)
         self.unet = unet
 
     def _padding(self, a, b):
@@ -415,7 +422,7 @@ if __name__ == "__main__":
 
     key = random.PRNGKey(0)
 
-    model = PropagationCNN(mode=mode, d=0.05)
+    model = PropagationCNN(mode=mode, d=0.05, outer_skip=False)
     variables = model.init(key, phase)
 
     @jax.jit
