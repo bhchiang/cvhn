@@ -240,7 +240,7 @@ for e in range(opt.num_epochs):
         running_loss_mse = 0.
 
         if phase == 'train':
-            tensorboard_freq = 100
+            tensorboard_freq = 1000
         else:
             psnr_list = []
             tensorboard_freq = 1
@@ -274,11 +274,9 @@ for e in range(opt.num_epochs):
                                   i_acc)
                 writer.add_scalar(f'Loss_{phase}/L2', np.array(loss_mse),
                                   i_acc)
-                print(captured_amp.shape)
                 captured_amp = utils.crop_image(captured_amp, roi_res)
 
                 if i % tensorboard_im_freq == 0 and opt.tb_image:
-                    print(model_amp.shape, roi_res, captured_filename)
                     model_amp = utils.crop_image(model_amp, roi_res)
                     model_amp = model_amp[..., 0]
                     captured_amp = captured_amp[..., 0]
