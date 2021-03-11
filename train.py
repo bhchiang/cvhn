@@ -304,7 +304,6 @@ for e in range(opt.num_epochs):
                 loader)  # average loss over epoch
             running_losses_mse[phase] = running_loss_mse / len(
                 loader)  # average mse loss over epoch
-            break
 
     # report every epoch
     # from IPython import embed
