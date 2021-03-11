@@ -25,7 +25,7 @@ def argument_parser():
                    help='Directory for saving out checkpoints')
     p.add_argument('--tb_path',
                    type=str,
-                   default='./runs',
+                   default='./JAX_runs',
                    help='Directory for tensorboard files')
     p.add_argument('--tb_image',
                    type=utils.str2bool,

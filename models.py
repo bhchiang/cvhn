@@ -39,11 +39,11 @@ class Mode(enum.Enum):
     COMPLEX = 3
 
 
-# TODO: Implement InstanceNorm instead of LayerNorm
+# InstanceNorm can be expressed as GroupNorm where the group size is set to 1
 class InstanceNorm(nn.Module):
     @nn.compact
     def __call__(self, x):
-        return nn.LayerNorm()(x)
+        return nn.GroupNorm(num_groups=None, group_size=1)(x) 
 
 
 class ComplexLayerNorm(nn.Module):
