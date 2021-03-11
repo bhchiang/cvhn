@@ -44,8 +44,6 @@ import numpy as np
 # Command line argument processing
 p = helper.argument_parser()
 opt = p.parse_args()
-opt = helper.force_options(
-    opt)  # set query with opt.experiment in command line
 
 # Initialize Run ID
 channel = opt.channel  # Red:0 / Green:1 / Blue:2
@@ -78,8 +76,10 @@ phase = jnp.array(torch.tensor(im, dtype=torch.float32).reshape(*im.shape,
                                                                 1))[..., 0]
 mode = helper.get_mode(opt.target_network)
 print(f'Mode set: {mode}')
+print(f"Outer skip: {opt.outer_skip, type(opt.outer_skip)}")
+
 key = random.PRNGKey(0)
-model = PropagationCNN(mode=mode, d=prop_dist)
+model = PropagationCNN(mode=mode, d=prop_dist, outer_skip=opt.outer_skip)
 variables = model.init(key, phase)
 
 
