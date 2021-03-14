@@ -19,7 +19,7 @@ def mod_ReLU(x, b=-1):
 
 
 def _b_init(rng, shape):
-    return -1
+    return -1.
 
 
 class _mod_ReLU(nn.Module):
