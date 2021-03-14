@@ -33,6 +33,7 @@ from tensorboardX import SummaryWriter
 import train_helper as helper
 from models import PropagationCNN
 from flax import serialization, optim
+import optimize
 from jax import jit
 from skimage import io
 import jax
@@ -77,7 +78,7 @@ phase = jnp.array(torch.tensor(im, dtype=torch.float32).reshape(*im.shape,
 mode = helper.get_mode(opt.target_network)
 print(f'Mode set: {mode}')
 print(f"Outer skip: {opt.outer_skip, type(opt.outer_skip)}")
-
+print(f"Lr: {opt.lr_model, type(opt.lr_model)}")
 key = random.PRNGKey(0)
 model = PropagationCNN(mode=mode, d=prop_dist, outer_skip=opt.outer_skip)
 variables = model.init(key, phase)
@@ -90,7 +91,8 @@ def apply(variables, phase):
 
 # Setup optimizer
 def create_optimizer(params, learning_rate=opt.lr_model):
-    optimizer_def = optim.Adam(learning_rate=learning_rate)
+    # optimizer_def = optim.Adam(learning_rate=learning_rate)
+    optimizer_def = optimize.GradientDescent(learning_rate=learning_rate)
     optimizer = optimizer_def.create(params)
     return optimizer
 
@@ -259,8 +261,11 @@ for e in range(opt.num_epochs):
                 'captured': captured_amp,  # (H, W)
             }
 
+            print(slm_phase.shape, captured_amp.shape)
+
             if phase == 'train':
                 optimizer, loss = train_step(optimizer, batch)
+                print(f"Loss = {loss}")
                 if i % tensorboard_freq == 0:
                     loss_mse = compute_mse(optimizer, batch)
                 if i % tensorboard_im_freq == 0 and opt.tb_image:
