@@ -16,10 +16,12 @@ from jax import numpy as jnp
 from jax import random
 from skimage import io
 from tqdm import tqdm
+from complex_activations import _compelex_activations
 
 # Add more options if necessary
 Norm = Literal["instance"]
-Activation = Literal["relu"]
+Activation = Literal["relu", "real_relu", "complex_relu", "complex_cardiod",
+                     "mod_relu"]
 
 PRNGKey = Any
 Array = Any
@@ -155,8 +157,12 @@ class UNetSkipConnectionBlock(nn.Module):
             self.down_norm = ComplexLayerNorm(dtype=jnp.complex64,
                                               bias_init=_complex_bias_init,
                                               scale_init=_complex_scale_init)
-            self.down_activation = _complex_relu
+            if self.activation not in _compelex_activations:
+                raise ValueError(
+                    "Invalid complex activation for Mode.COMPLEX, look at complex_activations.py for all valid choices."
+                )
 
+            self.down_activation = _compelex_activations[self.activation]
             self.up_conv = nn.ConvTranspose(features=self.up_nc,
                                             kernel_size=(4, 4),
                                             strides=(2, 2),
@@ -166,7 +172,7 @@ class UNetSkipConnectionBlock(nn.Module):
             self.up_norm = ComplexLayerNorm(dtype=jnp.complex64,
                                             bias_init=_complex_bias_init,
                                             scale_init=_complex_scale_init)
-            self.up_activation = _complex_relu
+            self.up_activation = _compelex_activations[self.activation]
         else:
             self.down_conv = nn.Conv(
                 features=self.down_nc,
@@ -345,7 +351,8 @@ class PropagationCNN(nn.Module):
         unet = UNet(input_nc_target=input_nc_target,
                     output_nc_target=output_nc_target,
                     mode=self.mode,
-                    outer_skip=self.outer_skip)
+                    outer_skip=self.outer_skip,
+                    activation=self.activation)
         self.unet = unet
 
     def _padding(self, a, b):

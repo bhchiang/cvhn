@@ -79,8 +79,13 @@ mode = helper.get_mode(opt.target_network)
 print(f'Mode set: {mode}')
 print(f"Outer skip: {opt.outer_skip, type(opt.outer_skip)}")
 print(f"Lr: {opt.lr_model, type(opt.lr_model)}")
+print(f"Activation: {opt.activation}")
+activation = opt.activation
 key = random.PRNGKey(0)
-model = PropagationCNN(mode=mode, d=prop_dist, outer_skip=opt.outer_skip)
+model = PropagationCNN(mode=mode,
+                       d=prop_dist,
+                       outer_skip=opt.outer_skip,
+                       activation=opt.activation)
 variables = model.init(key, phase)
 
 

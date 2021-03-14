@@ -19,5 +19,5 @@ echo "Captured path: $captured_path"
 # 4: Complex
 # python train.py --phase_path "$phase_path" --captured_path "$captured_path" --target_network "complexcnnc" --experiment complex2
 
-# 5: Complex with lower learning rate`  ``
-python train.py --phase_path "$phase_path" --captured_path "$captured_path" --target_network "complexcnnc" --experiment complex_custom_gd
+# 5: Complex with lower learning rate
+python train.py --phase_path "$phase_path" --captured_path "$captured_path" --target_network "complexcnnc" --experiment test_activation --activation mod_relu
