@@ -48,11 +48,14 @@ opt = p.parse_args()
 
 # Initialize Run ID
 channel = opt.channel  # Red:0 / Green:1 / Blue:2
+_optimizer = opt.optimizer
 chan_str = ('red', 'green', 'blue')[channel]
 run_id = f'{chan_str}_{opt.experiment}_' \
          f'Target{opt.target_network}-Activation{opt.activation}-Norm{opt.norm}_' \
-         f'{opt.loss_type}loss_lr{opt.lr_model}'
+         f'Loss{opt.loss_type}_lr{opt.lr_model}_' \
+             f'Optimizer{_optimizer}'
 print(f'   - Training forward propagation model...')
+print(run_id)
 
 # Initialize setup parameters
 cm, mm, um, nm = 1e-2, 1e-3, 1e-6, 1e-9
@@ -77,8 +80,9 @@ phase = jnp.array(torch.tensor(im, dtype=torch.float32).reshape(*im.shape,
                                                                 1))[..., 0]
 mode = helper.get_mode(opt.target_network)
 print(f'Mode set: {mode}')
+print(f'Optimizer: {_optimizer}')
 print(f"Outer skip: {opt.outer_skip, type(opt.outer_skip)}")
-print(f"Lr: {opt.lr_model, type(opt.lr_model)}")
+print(f"Learning rate: {opt.lr_model, type(opt.lr_model)}")
 print(f"Activation: {opt.activation}")
 activation = opt.activation
 key = random.PRNGKey(0)
@@ -96,8 +100,15 @@ def apply(variables, phase):
 
 # Setup optimizer
 def create_optimizer(params, learning_rate=opt.lr_model):
-    # optimizer_def = optim.Adam(learning_rate=learning_rate)
-    optimizer_def = optimize.GradientDescent(learning_rate=learning_rate)
+    if _optimizer == "real_adam":
+        optimizer_def = optim.Adam(learning_rate=learning_rate)
+    elif _optimizer == "complex_gd":
+        optimizer_def = optimize.GradientDescent(learning_rate=learning_rate)
+    elif _optimizer == "complex_adam":
+        optimizer_def = optimize.Adam(learning_rate=learning_rate)
+    else:
+        raise ValueError("Unsupported optimizer name.")
+
     optimizer = optimizer_def.create(params)
     return optimizer
 
@@ -112,6 +123,7 @@ if opt.loss_type.lower() == 'l1':
     @jit
     def loss_train(x, y):
         return jnp.mean(roi_mask * jnp.abs(y - x))
+
 elif opt.loss_type.lower() == 'l2':
 
     @jit

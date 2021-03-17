@@ -70,6 +70,10 @@ def argument_parser():
                    type=str,
                    default='relu',
                    help='type of activation layers')
+    p.add_argument('--optimizer',
+                   type=str,
+                   default='flax_adam',
+                   help='Type of optimizer to use')
     p.add_argument('--sled',
                    type=utils.str2bool,
                    default=False,

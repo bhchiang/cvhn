@@ -10,12 +10,18 @@ def complex_ReLU(x):
     return (x.real > 0) * (x.imag > 0) * x
 
 
+def _filter(x):
+    return jnp.where(jnp.isnan(x), 0, x)
+
+
 def complex_Cardiod(x):
-    return 0.5 * (1 + x.real / (jnp.abs(x))) * x
+    x = 0.5 * (1 + x.real / (jnp.abs(x))) * x
+    return _filter(x)
 
 
 def mod_ReLU(x, b=-1):
-    return jnp.clip(jnp.abs(x) + b, a_min=0.0) / (jnp.abs(x)) * x
+    x = jnp.clip(jnp.abs(x) + b, a_min=0.0) / (jnp.abs(x)) * x
+    return _filter(x)
 
 
 def _b_init(rng, shape):
@@ -33,5 +39,6 @@ _compelex_activations = {
     "real_relu": real_ReLU,
     "complex_relu": complex_ReLU,
     "complex_cardiod": complex_Cardiod,
-    "mod_relu": _mod_ReLU(),
+    "learnable_mod_relu": _mod_ReLU(),
+    "fixed_mod_relu": mod_ReLU,
 }
