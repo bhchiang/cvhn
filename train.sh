@@ -19,10 +19,51 @@ echo "Captured path: $captured_path"
 # 4: Complex
 # python train.py --phase_path "$phase_path" --captured_path "$captured_path" --target_network "complexcnnc" --experiment complex2
 
-# 5: Complex with lower learning rate
+
+# Real Adam, complex cardiod
 python train.py --phase_path "$phase_path" --captured_path "$captured_path" \
     --target_network "complexcnnc" \
-    --experiment test1 \
+    --experiment exp5 \
+    --activation complex_cardiod \
+    --optimizer real_adam
+    --lr_model 5e-5
+
+# Complex Adam, real_relu
+python train.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "complexcnnc" \
+    --experiment exp6 \
     --activation real_relu \
+    --optimizer complex_adam
+    --lr_model 5e-5
+
+# Complex Adam, complex relu
+python train.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "complexcnnc" \
+    --experiment exp7 \
+    --activation complex_relu \
+    --optimizer complex_adam
+    --lr_model 5e-5
+
+# Complex Adam, complex cardiod
+python train.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "complexcnnc" \
+    --experiment exp8 \
+    --activation complex_cardiod \
+    --optimizer complex_adam
+    --lr_model 5e-5
+
+# Complex Adam, fixed_mod_relu
+python train.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "complexcnnc" \
+    --experiment exp9 \
+    --activation fixed_mod_relu \
+    --optimizer complex_adam
+    --lr_model 5e-5
+
+# Complex Adam, learnable_mod_relu
+python train.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "complexcnnc" \
+    --experiment exp10 \
+    --activation learnable_mod_relu \
     --optimizer complex_adam
     --lr_model 5e-5
