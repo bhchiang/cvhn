@@ -4,7 +4,9 @@ Complex Valued Holographic Networks
 
 # About
 
-This is the repository corresponding to our project titled "Learned Propagation Model with Complex Convolutions for Holographic Systems" for [EE 367](http://stanford.edu/class/ee367/).
+This is the repository corresponding to our project titled "Learned Propagation Model with Complex Convolutions for Holographic Systems" for [EE 367](http://stanford.edu/class/ee367/) in Winter 2021.
+
+The authors are Manu Gopakumar (manugopa@stanford.edu) and Bryan Chiang (bhchiang@stanford.edu).
 
 ## Dependencies
 
@@ -68,7 +70,7 @@ The three types of networks are:
 
 Evaluation happens with `evaluate.py`. This script runs a model (provided via `pretrained_path`) over the test set, providing L1 and MSE (-> PSNR) metrics.
 
-We've provided sample commands for running evaluation over the actual test set in `evaluation.sh`.
+We've provided sample commands for running evaluation over the actual test set in `evaluate.sh`.
 
 We've also provided a small dataset in `data` containing several images from the actual test set for quick evaluation.
 
@@ -77,6 +79,12 @@ You can download our best Stacked CNNC and Complex CNNC models from [Google Driv
 You can then run `toy_evaluate.sh` to get the results.
 
 ```sh
+chmod +x ./toy_evaluate.sh
+./toy_evaluate.sh
+```
+
+```sh
+# toy_evaluate.sh
 # Toy example on the small dataset
 phase_path="data/phase"
 captured_path="data/captured"
@@ -105,7 +113,3 @@ make tb
 - `asm.py` contains a JAX implementation of the angular spectrum method for free-space propagation.
 - `train.py` contains our training script.
 - `evaluate.py` contains our evaluation script.
-
-## Contact
-
-The authors are Manu Gopakumar (manugopa@stanford.edu) and Bryan Chiang (bhchiang@stanford.edu).
