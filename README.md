@@ -2,6 +2,10 @@
 
 Complex Valued Holographic Networks
 
+# About
+
+This is the repository corresponding to our project titled "Learned Propagation Model with Complex Convolutions for Holographic Systems" for [EE 367](http://stanford.edu/class/ee367/).
+
 ## Dependencies
 
 First, install JAX with GPU support enabled.
@@ -99,6 +103,8 @@ make tb
 - `phase_capture_loader.py` contains the Torch DataLoader for running the dataset.
 - `complex_activations.py` contains the complex activations functions for ComplexCNNC.
 - `asm.py` contains a JAX implementation of the angular spectrum method for free-space propagation.
+- `train.py` contains our training script.
+- `evaluate.py` contains our evaluation script.
 
 ## Contact
 
