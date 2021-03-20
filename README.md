@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-Note: the dataset has not been published and as a result is not publicly available. You can find more details about the dataset inside our paper.
+Note: the dataset has not been published and as a result is not publicly available. You can find more details about the dataset inside our report.
 
 Find the root location of the dataset. It should contain a folder called `holography_training_data`.
 
