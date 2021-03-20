@@ -1,6 +1,6 @@
 # cvhn
 
-Complex Valued Holographic Networks
+Complex Valued Holography Networks
 
 # About
 
