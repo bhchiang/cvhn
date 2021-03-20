@@ -95,6 +95,25 @@ python evaluate.py --phase_path "$phase_path" --captured_path "$captured_path" \
     --target_network "stackedcnnc" \
     --experiment evaluate_best_stacked_cnnc \
     --pretrained_path "$pretrained_path" \
+
+# Best real_relu for ComplexCNNc
+pretrained_path="final_models/green_exp6_Targetcomplexcnnc-Activationreal_relu-Norminstance_LossL1_lr5e-05_Optimizercomplex_adam_model_6epoch.pth"
+python evaluate.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "complexcnnc" \
+    --experiment evaluate_real_relu \
+    --activation real_relu \
+    --pretrained_path "$pretrained_path" \
+    --optimizer complex_adam
+```
+
+These were our results on our setup:
+
+```txt
+# Stacked CNNC
+avg_mse = 0.0002837978463503532, avg_objective = 0.010521531105041504
+
+# Complex CNNc with real_relu
+avg_mse = 0.00035572584602050483, avg_objective = 0.011939069256186485
 ```
 
 ### Artifacts
