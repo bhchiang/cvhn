@@ -38,6 +38,7 @@ import optimize
 from jax import jit
 from skimage import io
 import jax
+from tqdm import tqdm
 from jax import random
 from jax import numpy as jnp
 from imageio import imread
@@ -89,6 +90,7 @@ model = PropagationCNN(mode=mode,
                        outer_skip=opt.outer_skip,
                        activation=opt.activation)
 variables = model.init(key, phase)
+print("Model created")
 
 
 @jit
@@ -125,6 +127,8 @@ if opt.pretrained_path != '':
     bytes_input = ifile.read()
     ifile.close()
     variables = serialization.from_bytes(variables, bytes_input)
+else:
+    raise ValueError("Pass in a pretrained model path for test evaluation.")
 
 
 @jit
@@ -153,8 +157,8 @@ loader = torch.utils.data.DataLoader(PhaseCaptureLoader(
     image_res=image_res,
     shuffle=False,
     sled=opt.sled),
-                                           batch_size=1)
-                                           
+                                     batch_size=1)
+
 # tensorboard writer
 summaries_dir = os.path.join(opt.tb_path, run_id)
 utils.cond_mkdir(summaries_dir)
@@ -164,7 +168,7 @@ tensorboard_im_count = 10
 running_loss = 0.
 running_loss_mse = 0.
 H = None
-for i, phase_capture in enumerate(loader):
+for i, phase_capture in tqdm(enumerate(loader)):
     print(f'{i}')
 
     # SLM phase, Captured amp(s), and idxs of corresponding planes
@@ -178,17 +182,14 @@ for i, phase_capture in enumerate(loader):
     }
     model_amp, loss, loss_mse = val_step(variables, batch)
 
-    # write to tensorboard
-    writer.add_scalar(f'objective', np.array(loss),
-                        i)
-    writer.add_scalar(f'L2', np.array(loss_mse),
-                        i)
+    # Write to tensorboard
+    writer.add_scalar(f'objective', np.array(loss), i)
+    writer.add_scalar(f'L2', np.array(loss_mse), i)
     captured_amp = utils.crop_image(captured_amp, roi_res)
 
     if i % 300 < tensorboard_im_count and opt.tb_image:
         if H is None:
-            H = asm.compute(image_res, feature_size,
-                        wavelength, prop_dist)
+            H = asm.compute(image_res, feature_size, wavelength, prop_dist)
 
         slm_field = jnp.exp(slm_phase[0, ..., 0] * 1j)
         a_h, a_w = H.shape
@@ -198,24 +199,28 @@ for i, phase_capture in enumerate(loader):
         slm_field = asm._pad(slm_field, pad_y, pad_x)
         z = asm.propagate(slm_field, H)
         z = asm._crop(z, pad_y, pad_x)
-        ideal_amp = jnp.abs(jnp.expand_dims(jnp.expand_dims(z, axis=-1), axis=0))
+        ideal_amp = jnp.abs(
+            jnp.expand_dims(jnp.expand_dims(z, axis=-1), axis=0))
         ideal_amp = utils.crop_image(ideal_amp, roi_res)
-        ideal_amp = ideal_amp*captured_amp.mean()/ideal_amp.mean()
+        ideal_amp = ideal_amp * captured_amp.mean() / ideal_amp.mean()
 
         model_amp = utils.crop_image(model_amp, roi_res)
         model_amp = model_amp[..., 0]
         captured_amp = captured_amp[..., 0]
         ideal_amp = ideal_amp[..., 0]
-        max_amp = max(max(model_amp.max(), captured_amp.max()), ideal_amp.max())
-        writer.add_image(f'recon',
-                            np.array(model_amp / max_amp), i)
-        writer.add_image(f'captured',
-                            np.array(captured_amp / max_amp), i)
-        writer.add_image(f'ideal',
-                            np.array(ideal_amp / max_amp), i)
+        max_amp = max(max(model_amp.max(), captured_amp.max()),
+                      ideal_amp.max())
+        writer.add_image(f'recon', np.array(model_amp / max_amp), i)
+        writer.add_image(f'captured', np.array(captured_amp / max_amp), i)
+        writer.add_image(f'ideal', np.array(ideal_amp / max_amp), i)
 
     running_loss += np.array(loss)
     running_loss_mse += np.array(loss_mse)
 
-writer.add_scalar('Avg_objective', running_loss/len(loader), 0)
-writer.add_scalar('Avg_L2', running_loss_mse/len(loader), 0)
+avg_objective = running_loss / len(loader)
+avg_mse = running_loss_mse / len(loader)
+print(running_loss, running_loss_mse)
+print(f"running_loss = {running_loss}, running_loss_mse = {running_loss_mse}")
+print(f"avg_mse = {avg_mse}, avg_objective = {avg_objective}")
+writer.add_scalar('Avg_objective', avg_objective, 0)
+writer.add_scalar('Avg_L2', avg_mse, 0)

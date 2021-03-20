@@ -315,6 +315,16 @@ for e in range(opt.num_epochs):
                 #     psnr_list.append(psnr_srgb.item())
                 # writer.add_scalar(f'PSNR_srgb/{phase}', psnr_srgb,
                 #                   i_acc)
+            if i % 1000 == 0 and phase == "train":
+                # save model, every epoch
+                print(f"Saving model epoch {e+1} iter {i+1}")
+                bytes_output = serialization.to_bytes(optimizer.target)
+                ofile = open(
+                    os.path.join(model_path,
+                                 f'{run_id}_model_iter{i+1}_{e+1}epoch.pth'),
+                    'wb')
+                ofile.write(bytes_output)
+                ofile.close()
 
             i_acc += 1
             running_loss += np.array(loss)
