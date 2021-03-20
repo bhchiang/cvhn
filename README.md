@@ -30,7 +30,7 @@ Note: the dataset has not been published and as a result is not publicly availab
 
 Find the root location of the dataset. It should contain a folder called `holography_training_data`.
 
-```
+```sh
 readlink -f /path/to/data
 ```
 
@@ -62,22 +62,28 @@ The three types of networks are:
 
 ### Evaluation
 
-Evaluation happens with `evaluate.py`. This script runs a model (provided via `pretrained_path`) over the test set.
+Evaluation happens with `evaluate.py`. This script runs a model (provided via `pretrained_path`) over the test set, providing L1 and MSE (-> PSNR) metrics.
 
-Here is a sample evaluation command:
+We've provided sample commands for running evaluation over the actual test set in `evaluation.sh`.
+
+We've also provided a small dataset in `data` containing several images from the actual test set for quick evaluation.
+
+You can download our best Stacked CNNC and Complex CNNC models from [Google Drive](https://drive.google.com/drive/folders/1q5TsIo7rFdlCb0T4uP1wpJw1oMlpxdeN?usp=sharing), and put them into a folder called `final_models`.
+
+You can then run `toy_evaluate.sh` to get the results.
 
 ```sh
-source common.sh
-pretrained_path="models/green_exp6_trial2_Targetcomplexcnnc-Activationreal_relu-Norminstance_LossL1_lr0.0005_Optimizercomplex_adam_model_iter8001_1epoch.pth"
-python evaluate.py --phase_path "$phase_path" --captured_path "$captured_path" \
-    --target_network "complexcnnc" \
-    --experiment exp6_trial2 \
-    --activation real_relu \
-    --pretrained_path "$pretrained_path" \
-    --optimizer complex_adam
-```
+# Toy example on the small dataset
+phase_path="data/phase"
+captured_path="data/captured"
 
-You can see a full list of different evaluation commands in `evaluation.sh`.
+# Best Stacked CNNc
+pretrained_path="final_models/green__Targetstackedcnnc-Activationrelu-Norminstance_L1loss_lr0.0005_outerskipTrue_model_11epoch.pth"
+python evaluate.py --phase_path "$phase_path" --captured_path "$captured_path" \
+    --target_network "stackedcnnc" \
+    --experiment evaluate_best_stacked_cnnc \
+    --pretrained_path "$pretrained_path" \
+```
 
 ### Artifacts
 
